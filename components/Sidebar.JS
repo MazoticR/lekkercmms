@@ -6,11 +6,8 @@ export default function Sidebar() {
 
   const menuItems = [
     { href: '/', icon: '🏠', label: 'Home' },
-    { href: '/dashboard', icon: '📊', label: 'Dashboard' },
-    { href: '/products', icon: '📦', label: 'Products' },
-    { href: '/orders', icon: '🛒', label: 'Orders' },
-    { href: '/customers', icon: '👥', label: 'Customers' },
-    { href: '/settings', icon: '⚙️', label: 'Settings' },
+    { href: '/machines', icon: '📊', label: 'Dashboard' },
+   
   ];
 
   return (
