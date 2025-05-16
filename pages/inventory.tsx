@@ -3,6 +3,10 @@ import supabase from '../lib/supabaseClient';
 import { Database } from '../types/db_types';
 
 type InventoryPart = Database['inventory_parts']['Row'];
+type AffectedMachine = {
+  id: number;
+  machines: { name: string };
+};
 
 export default function InventoryPage() {
   const [parts, setParts] = useState<InventoryPart[]>([]);
@@ -17,6 +21,10 @@ export default function InventoryPage() {
   } | null>(null);
   const [editingPart, setEditingPart] = useState<Partial<InventoryPart> | null>(null);
   const [editingField, setEditingField] = useState<keyof InventoryPart | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{
+    id: number;
+    affectedMachines: AffectedMachine[];
+  } | null>(null);
 
   useEffect(() => {
     fetchParts();
@@ -76,6 +84,59 @@ export default function InventoryPage() {
     }
   }
 
+async function prepareDelete(id: number) {
+  // Define the exact type we expect to get back
+  type MachinePartWithMachine = {
+    id: number;
+    machines: { name: string };
+  };
+
+  const { data: affectedMachines, error } = await supabase
+    .from('machine_parts')
+    .select('id, machines!inner(name)')
+    .eq('inventory_part_id', id) as { data: MachinePartWithMachine[] | null, error: any };
+
+  if (error) {
+    console.error('Error checking affected machines:', error);
+    showNotification('Failed to check machine dependencies', 'error');
+    return;
+  }
+
+  setConfirmDelete({
+    id,
+    affectedMachines: affectedMachines || []
+  });
+}
+
+  async function deletePart() {
+    if (!confirmDelete) return;
+
+    try {
+      const { error } = await supabase
+        .from('inventory_parts')
+        .delete()
+        .eq('id', confirmDelete.id);
+
+      if (error) throw error;
+      
+      showNotification(
+        `Part deleted${confirmDelete.affectedMachines.length ? ` (removed from ${confirmDelete.affectedMachines.length} machine(s))` : ''}`,
+        'success'
+      );
+      fetchParts();
+    } catch (error: any) {
+      showNotification(
+        error.message.includes('foreign key') 
+          ? 'Deletion failed: Part is in use' 
+          : 'Failed to delete part',
+        'error'
+      );
+      console.error('Delete error:', error);
+    } finally {
+      setConfirmDelete(null);
+    }
+  }
+
   function resetForm() {
     setPartNumber('');
     setDescription('');
@@ -97,7 +158,6 @@ export default function InventoryPage() {
   async function saveEdit() {
     if (!editingPart || !editingField) return;
 
-    // Only update the field being edited
     const updateData = {
       [editingField]: editingPart[editingField],
       last_updated: new Date().toISOString()
@@ -152,6 +212,46 @@ export default function InventoryPage() {
           >
             &times;
           </button>
+        </div>
+      )}
+
+      {/* Enhanced Delete Confirmation Modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+            <h3 className="text-xl font-bold mb-2">Confirm Delete</h3>
+            
+            {confirmDelete.affectedMachines.length > 0 ? (
+              <>
+                <p className="mb-2">This part is used by:</p>
+                <ul className="list-disc pl-5 mb-4 max-h-40 overflow-y-auto">
+                  {confirmDelete.affectedMachines.map(m => (
+                    <li key={m.id} className="py-1">{m.machines.name}</li>
+                  ))}
+                </ul>
+                <p className="text-red-600 mb-4">
+                  Deleting will remove it from all {confirmDelete.affectedMachines.length} machine(s)!
+                </p>
+              </>
+            ) : (
+              <p className="mb-4">No machines are using this part.</p>
+            )}
+
+            <div className="flex justify-end space-x-4">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={deletePart}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+              >
+                {confirmDelete.affectedMachines.length ? 'Delete Anyway' : 'Delete'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -220,6 +320,7 @@ export default function InventoryPage() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Min Qty</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -318,6 +419,16 @@ export default function InventoryPage() {
                 {/* Last Updated */}
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {new Date(part.last_updated).toLocaleString()}
+                </td>
+
+      {/* Update your delete button in the table to use prepareDelete */}
+      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+        <button
+          onClick={() => prepareDelete(part.id)}
+          className="text-red-600 hover:text-red-800"
+        >
+          Delete
+        </button>
                 </td>
               </tr>
             ))}
