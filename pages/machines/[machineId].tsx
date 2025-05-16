@@ -1,4 +1,3 @@
-// pages/machines/[machineId].tsx
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/router';
 import supabase from '../../lib/supabaseClient';
@@ -15,7 +14,7 @@ interface MachinePart {
   machine_id: number;
   part_name: string;
   code: string;
-  last_replaced_date: string | null; // date stored as ISO string; may be null
+  last_replaced_date: string | null;
 }
 
 const MachineDetailPage = () => {
@@ -83,86 +82,108 @@ const MachineDetailPage = () => {
   }
 
   return (
-    <div style={{ padding: '2rem' }}>
-      <button onClick={() => router.push('/machines')} style={{ marginBottom: '1rem' }}>
-        &larr; Back to Machines
+    <div className="p-8">
+      <button 
+        onClick={() => router.push('/machines')} 
+        className="flex items-center text-purple-600 hover:text-purple-800 mb-6 transition duration-200"
+      >
+        <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+        </svg>
+        Back to Machines
       </button>
+
       {machine ? (
         <div>
-          <h1>{machine.name}</h1>
-          <p>
-            <strong>Location:</strong> {machine.location}
-          </p>
-          <p>
-            <strong>Status:</strong> {machine.status}
-          </p>
+          <div className="bg-white p-6 rounded-lg shadow-md mb-8">
+            <h1 className="text-2xl font-bold text-gray-800 mb-2">{machine.name}</h1>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-gray-500">Location</p>
+                <p className="text-gray-700">{machine.location}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">Status</p>
+                <p className="text-gray-700">{machine.status}</p>
+              </div>
+            </div>
+          </div>
 
-          <h2>Machine Parts</h2>
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Machine Parts</h2>
 
           {/* Form to add a new part */}
-          <form onSubmit={addPart} style={{ marginBottom: '1rem' }}>
-            <input
-              type="text"
-              placeholder="Part Name"
-              value={partName}
-              onChange={(e) => setPartName(e.target.value)}
-              required
-              style={{ marginRight: '1rem', padding: '0.5rem' }}
-            />
-            <input
-              type="text"
-              placeholder="Code"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              required
-              style={{ marginRight: '1rem', padding: '0.5rem' }}
-            />
-            <input
-              type="date"
-              placeholder="Last Replaced Date"
-              value={lastReplacedDate}
-              onChange={(e) => setLastReplacedDate(e.target.value)}
-              style={{ marginRight: '1rem', padding: '0.5rem' }}
-            />
-            <button type="submit" style={{ padding: '0.5rem 1rem' }}>
+          <form onSubmit={addPart} className="bg-white p-6 rounded-lg shadow-md mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <input
+                type="text"
+                placeholder="Part Name"
+                value={partName}
+                onChange={(e) => setPartName(e.target.value)}
+                required
+                className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              <input
+                type="text"
+                placeholder="Code"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                required
+                className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              <input
+                type="date"
+                placeholder="Last Replaced Date"
+                value={lastReplacedDate}
+                onChange={(e) => setLastReplacedDate(e.target.value)}
+                className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+            <button 
+              type="submit" 
+              className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded transition duration-200"
+            >
               Add Part
             </button>
           </form>
 
           {/* Table listing all parts for this machine */}
-          <table border={1} cellPadding={8} cellSpacing={0} style={{ width: '100%' }}>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Part Name</th>
-                <th>Code</th>
-                <th>Last Replaced Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {parts.length > 0 ? (
-                parts.map((part) => (
-                  <tr key={part.id}>
-                    <td>{part.id}</td>
-                    <td>{part.part_name}</td>
-                    <td>{part.code}</td>
-                    <td>
-                      {part.last_replaced_date
-                        ? new Date(part.last_replaced_date).toLocaleDateString()
-                        : 'N/A'}
-                    </td>
-                  </tr>
-                ))
-              ) : (
+          <div className="bg-white rounded-lg shadow-md overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
                 <tr>
-                  <td colSpan={4}>No parts found</td>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Replaced Date</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {parts.length > 0 ? (
+                  parts.map((part) => (
+                    <tr key={part.id}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{part.id}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{part.part_name}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{part.code}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {part.last_replaced_date
+                          ? new Date(part.last_replaced_date).toLocaleDateString()
+                          : 'N/A'}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500">No parts found</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : (
-        <p>Loading machine details...</p>
+        <div className="text-center py-8">
+          <p className="text-gray-500">Loading machine details...</p>
+        </div>
       )}
     </div>
   );
