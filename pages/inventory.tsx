@@ -15,8 +15,8 @@ export default function InventoryPage() {
     message: string;
     type: 'success' | 'error';
   } | null>(null);
-  const [editingPart, setEditingPart] = useState<InventoryPart | null>(null);
-  const [editQuantity, setEditQuantity] = useState(0);
+  const [editingPart, setEditingPart] = useState<Partial<InventoryPart> | null>(null);
+  const [editingField, setEditingField] = useState<keyof InventoryPart | null>(null);
 
   useEffect(() => {
     fetchParts();
@@ -43,7 +43,6 @@ export default function InventoryPage() {
       return;
     }
 
-    // Check if part exists to accumulate quantity
     const existingPart = parts.find(p => p.part_number === partNumber.trim());
     const newQuantity = existingPart ? existingPart.quantity + (quantity || 0) : (quantity || 0);
 
@@ -52,10 +51,10 @@ export default function InventoryPage() {
       .upsert(
         {
           part_number: partNumber.trim(),
-          description: description.trim() || null,
+          description: existingPart ? existingPart.description : description.trim() || null,
           quantity: newQuantity,
-          cost: cost || null,
-          min_quantity: minQuantity || 1,
+          cost: existingPart ? existingPart.cost : cost || null,
+          min_quantity: existingPart ? existingPart.min_quantity : minQuantity || 1,
           last_updated: new Date().toISOString()
         },
         {
@@ -70,8 +69,8 @@ export default function InventoryPage() {
       console.error('Error saving part:', error);
       showNotification(`Error: ${error.message}`, 'error');
     } else {
-      const action = existingPart ? 'Updated' : 'Added';
-      showNotification(`${action} part ${partNumber}`, 'success');
+      const action = existingPart ? 'Added stock to' : 'Added new part';
+      showNotification(`${action} ${partNumber}`, 'success');
       resetForm();
       fetchParts();
     }
@@ -90,30 +89,49 @@ export default function InventoryPage() {
     setTimeout(() => setNotification(null), 5000);
   }
 
-  function openEditModal(part: InventoryPart) {
+  function startEditing(part: InventoryPart, field: keyof InventoryPart) {
     setEditingPart(part);
-    setEditQuantity(part.quantity);
+    setEditingField(field);
   }
 
-  async function saveModifiedPart() {
-    if (!editingPart) return;
+  async function saveEdit() {
+    if (!editingPart || !editingField) return;
+
+    // Only update the field being edited
+    const updateData = {
+      [editingField]: editingPart[editingField],
+      last_updated: new Date().toISOString()
+    };
 
     const { error } = await supabase
       .from('inventory_parts')
-      .update({
-        quantity: editQuantity,
-        last_updated: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('id', editingPart.id);
 
     if (error) {
-      console.error('Error updating quantity:', error);
-      showNotification('Failed to update quantity', 'error');
+      console.error('Error updating part:', error);
+      showNotification('Failed to update part', 'error');
     } else {
-      showNotification(`Updated quantity for ${editingPart.part_number}`, 'success');
+      showNotification(`Updated ${editingField} for ${editingPart.part_number}`, 'success');
       setEditingPart(null);
+      setEditingField(null);
       fetchParts();
     }
+  }
+
+  function handleFieldChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!editingPart || !editingField) return;
+
+    const value = editingField === 'quantity' || editingField === 'min_quantity'
+      ? parseInt(e.target.value) || 0
+      : editingField === 'cost'
+      ? parseFloat(e.target.value) || null
+      : e.target.value;
+
+    setEditingPart({
+      ...editingPart,
+      [editingField]: value
+    });
   }
 
   return (
@@ -137,44 +155,9 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {/* Modify Modal */}
-      {editingPart && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl w-full max-w-md">
-            <h3 className="text-xl font-bold mb-4">
-              Modify {editingPart.part_number}
-            </h3>
-            <div className="mb-4">
-              <label className="block text-gray-700 mb-2">Quantity</label>
-              <input
-                type="number"
-                value={editQuantity}
-                onChange={(e) => setEditQuantity(Number(e.target.value))}
-                min="0"
-                className="w-full p-2 border border-gray-300 rounded"
-              />
-            </div>
-            <div className="flex justify-end space-x-4">
-              <button
-                onClick={() => setEditingPart(null)}
-                className="px-4 py-2 border border-gray-300 rounded"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={saveModifiedPart}
-                className="px-4 py-2 bg-purple-600 text-white rounded"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <h1 className="text-3xl font-bold mb-6 text-gray-800">Inventory Management</h1>
 
-      {/* Add/Update Part Form */}
+      {/* Add Part Form */}
       <form onSubmit={addPart} className="bg-white p-6 rounded-lg shadow-md mb-8">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
           <input
@@ -237,47 +220,107 @@ export default function InventoryPage() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Min Qty</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {parts.length > 0 ? (
-              parts.map((part) => (
-                <tr 
-                  key={part.id} 
-                  className={part.quantity <= part.min_quantity ? 'bg-red-50' : 'hover:bg-gray-50'}
+            {parts.map((part) => (
+              <tr 
+                key={part.id} 
+                className={part.quantity <= part.min_quantity ? 'bg-red-50' : 'hover:bg-gray-50'}
+              >
+                {/* Part Number */}
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  {part.part_number}
+                </td>
+
+                {/* Description */}
+                <td 
+                  className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer"
+                  onClick={() => startEditing(part, 'description')}
                 >
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{part.part_number}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{part.description || 'N/A'}</td>
-                  <td className={`px-6 py-4 whitespace-nowrap text-sm ${
+                  {editingPart?.id === part.id && editingField === 'description' ? (
+                    <input
+                      type="text"
+                      value={editingPart.description || ''}
+                      onChange={handleFieldChange}
+                      onBlur={saveEdit}
+                      autoFocus
+                      className="w-full p-1 border border-gray-300 rounded"
+                    />
+                  ) : (
+                    part.description || 'N/A'
+                  )}
+                </td>
+
+                {/* Quantity */}
+                <td 
+                  className={`px-6 py-4 whitespace-nowrap text-sm cursor-pointer ${
                     part.quantity <= part.min_quantity ? 'text-red-600 font-bold' : 'text-gray-500'
-                  }`}>
-                    {part.quantity}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {part.cost ? `$${part.cost.toFixed(2)}` : 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {part.min_quantity}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(part.last_updated).toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    <button
-                      onClick={() => openEditModal(part)}
-                      className="text-purple-600 hover:text-purple-800 underline"
-                    >
-                      Modify
-                    </button>
-                  </td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">No inventory parts found</td>
+                  }`}
+                  onClick={() => startEditing(part, 'quantity')}
+                >
+                  {editingPart?.id === part.id && editingField === 'quantity' ? (
+                    <input
+                      type="number"
+                      value={editingPart.quantity}
+                      onChange={handleFieldChange}
+                      onBlur={saveEdit}
+                      autoFocus
+                      min="0"
+                      className="w-full p-1 border border-gray-300 rounded"
+                    />
+                  ) : (
+                    part.quantity
+                  )}
+                </td>
+
+                {/* Cost */}
+                <td 
+                  className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer"
+                  onClick={() => startEditing(part, 'cost')}
+                >
+                  {editingPart?.id === part.id && editingField === 'cost' ? (
+                    <input
+                      type="number"
+                      value={editingPart.cost || ''}
+                      onChange={handleFieldChange}
+                      onBlur={saveEdit}
+                      autoFocus
+                      step="0.01"
+                      min="0"
+                      className="w-full p-1 border border-gray-300 rounded"
+                    />
+                  ) : (
+                    part.cost ? `$${part.cost.toFixed(2)}` : 'N/A'
+                  )}
+                </td>
+
+                {/* Min Quantity */}
+                <td 
+                  className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer"
+                  onClick={() => startEditing(part, 'min_quantity')}
+                >
+                  {editingPart?.id === part.id && editingField === 'min_quantity' ? (
+                    <input
+                      type="number"
+                      value={editingPart.min_quantity}
+                      onChange={handleFieldChange}
+                      onBlur={saveEdit}
+                      autoFocus
+                      min="1"
+                      className="w-full p-1 border border-gray-300 rounded"
+                    />
+                  ) : (
+                    part.min_quantity
+                  )}
+                </td>
+
+                {/* Last Updated */}
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {new Date(part.last_updated).toLocaleString()}
+                </td>
               </tr>
-            )}
+            ))}
           </tbody>
         </table>
       </div>
