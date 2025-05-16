@@ -12,17 +12,15 @@ export const parseExcelFile = async (file: File): Promise<WorkerData[]> => {
     let currentWorker: WorkerData | null = null;
 
     worksheet.eachRow({ includeEmpty: true }, (row, rowNumber) => {
-      const rowValues = row.values as Array<string | number | null | undefined>;
+      const rowValues = row.values as Array<string | number | Date | null | undefined>;
       
       // Skip header rows or empty rows
       if (rowNumber <= 2 || !rowValues[1]) return;
 
-      // Check for worker header row (e.g., "26 / INICIADA MARTINEZ CENOBIO")
+      // Check for worker header row
       const workerMatch = String(rowValues[1]).match(/(\d+)\s*\/\s*(.+)/);
       if (workerMatch) {
-        if (currentWorker) {
-          workers.push(currentWorker);
-        }
+        if (currentWorker) workers.push(currentWorker);
         currentWorker = {
           id: workerMatch[1],
           name: workerMatch[2].trim(),
@@ -43,13 +41,13 @@ export const parseExcelFile = async (file: File): Promise<WorkerData[]> => {
       // Check for hours worked row
       if (String(rowValues[1]).match(/Horas trabajadas/i)) {
         currentWorker.hoursWorked = {
-          mon: String(rowValues[5] || ''),
-          tue: String(rowValues[6] || ''),
-          wed: String(rowValues[7] || ''),
-          thu: String(rowValues[8] || ''),
-          fri: String(rowValues[9] || ''),
-          sat: String(rowValues[10] || ''),
-          sun: String(rowValues[11] || '')
+          mon: formatExcelTime(rowValues[5]),
+          tue: formatExcelTime(rowValues[6]),
+          wed: formatExcelTime(rowValues[7]),
+          thu: formatExcelTime(rowValues[8]),
+          fri: formatExcelTime(rowValues[9]),
+          sat: formatExcelTime(rowValues[10]),
+          sun: formatExcelTime(rowValues[11])
         };
         return;
       }
@@ -133,6 +131,31 @@ export const parseExcelFile = async (file: File): Promise<WorkerData[]> => {
   }
 };
 
+// Helper function to format Excel time values
+function formatExcelTime(value: any): string {
+  if (!value) return '0:00';
+  
+  // If it's already in HH:MM format
+  if (typeof value === 'string' && value.includes(':')) {
+    return value;
+  }
+  
+  // If it's a number (Excel time format)
+  if (typeof value === 'number') {
+    const totalMinutes = Math.floor(value * 24 * 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${hours}:${minutes.toString().padStart(2, '0')}`;
+  }
+  
+  // If it's a Date object
+  if (value instanceof Date) {
+    return `${value.getHours()}:${value.getMinutes().toString().padStart(2, '0')}`;
+  }
+  
+  return '0:00';
+}
+
 export const calculateEfficiency = (
   operations: Operation[],
   hoursWorked: DailyHours,
@@ -178,10 +201,8 @@ export const calculateEfficiency = (
 export const generateExcelFile = async (workers: WorkerData[]): Promise<Blob> => {
   try {
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Time Tracker App';
-    workbook.created = new Date();
-
-    for (const worker of workers) {
+    
+    workers.forEach(worker => {
       const worksheet = workbook.addWorksheet(worker.name.substring(0, 31));
 
       // Add worker header
@@ -231,13 +252,17 @@ export const generateExcelFile = async (workers: WorkerData[]): Promise<Blob> =>
       ]);
 
       // Add bonus
-      worksheet.addRow([
-        'Bono', '', '', '', '',
-        worker.bonus.mon, worker.bonus.tue, worker.bonus.wed,
-        worker.bonus.thu, worker.bonus.fri, worker.bonus.sat,
-        worker.bonus.sun
-      ]);
-    }
+                worksheet.addRow([
+                'Bono', '', '', '', '',
+                worker.bonus?.mon || 0, 
+                worker.bonus?.tue || 0,
+                worker.bonus?.wed || 0,
+                worker.bonus?.thu || 0,
+                worker.bonus?.fri || 0,
+                worker.bonus?.sat || 0,
+                worker.bonus?.sun || 0
+                ]);
+    });
 
     const buffer = await workbook.xlsx.writeBuffer();
     return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
