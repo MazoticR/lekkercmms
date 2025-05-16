@@ -28,4 +28,29 @@ export type Database = {
       last_replaced_date?: string | null;
     };
   };
+    inventory_parts: {
+    Row: {
+      id: number;
+      part_number: string;
+      description: string | null;
+      quantity: number;
+      cost: number | null;
+      min_quantity: number;
+      last_updated: string;
+    };
+    Insert: {
+      part_number: string;
+      description?: string | null;
+      quantity?: number;
+      cost?: number | null;
+      min_quantity?: number;
+    };
+  };
+
 };
+
+
+/* Extended type for machine parts (optional)
+export interface MachinePartWithInventory extends MachinePart {
+  inventory_part?: InventoryPart | null;
+}*/

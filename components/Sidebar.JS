@@ -6,8 +6,8 @@ export default function Sidebar() {
 
   const menuItems = [
     { href: '/', icon: '🏠', label: 'Home' },
-    { href: '/machines', icon: '📊', label: 'Dashboard' },
-   
+    { href: '/machines', icon: '📊', label: 'Machines' },
+    { href: '/inventory', icon: '📊', label: 'Inventory' },
   ];
 
   return (
