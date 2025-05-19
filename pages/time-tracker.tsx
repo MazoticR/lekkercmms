@@ -10,20 +10,20 @@ const TimeTrackerPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleFileUpload = async (file: File) => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const parsedWorkers = await parseExcelFile(file);
-      setWorkers(parsedWorkers);
-    } catch (err) {
-      console.error('Error parsing file:', err);
-      setError('Failed to parse the Excel file. Please ensure it matches the expected format.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+const handleFileUpload = async (file: File) => {
+  setIsLoading(true);
+  setError(null);
+  
+  try {
+    const parsedWorkers = await parseExcelFile(file);
+    setWorkers([...parsedWorkers.map(w => ({ ...w }))]); // Added missing closing parenthesis
+  } catch (err) {
+    console.error('Error parsing file:', err);
+    setError('Failed to parse Excel file.');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const handleUpdateWorker = (updatedWorker: WorkerData) => {
     setWorkers(prev =>
@@ -33,24 +33,23 @@ const TimeTrackerPage: React.FC = () => {
     );
   };
 
-const handleDownload = async () => {
-  if (workers.length === 0) return;
-  
-  try {
-    const blob = await generateExcelFile(workers);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'updated_time_tracking.xlsx';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  } catch (error) {
-    console.error('Error generating file:', error);
-    // Add your error handling UI here
-  }
-};
+  const handleDownload = async () => {
+    if (workers.length === 0) return;
+    
+    try {
+      const blob = await generateExcelFile(workers);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'updated_time_tracking.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error generating file:', error);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -76,12 +75,12 @@ const handleDownload = async () => {
           <div className="mb-8">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold text-gray-900">Worker Data</h2>
-                    <button
-                    onClick={async () => await handleDownload()}
-                    className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                    >
-                    Download Updated File
-                    </button>
+              <button
+                onClick={handleDownload}
+                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+              >
+                Download Updated File
+              </button>
             </div>
 
             <div className="space-y-6">
