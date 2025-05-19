@@ -5,13 +5,29 @@ export default function Home() {
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
   const [message, setMessage] = useState<string>('Testing database connection...');
   const [stats, setStats] = useState<{ machines: number; parts: number } | null>(null);
+  const [hasConnectedOnce, setHasConnectedOnce] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
+    let connectionTimeout: NodeJS.Timeout;
+
     async function testConnection() {
       try {
-        setConnectionStatus('connecting');
-        setMessage('Testing database connection...');
-        
+        if (isMounted) {
+          setConnectionStatus('connecting');
+          setMessage('Testing database connection...');
+        }
+
+        // Set timeout only if we haven't connected before
+        if (!hasConnectedOnce) {
+          connectionTimeout = setTimeout(() => {
+            if (isMounted && connectionStatus === 'connecting') {
+              setConnectionStatus('error');
+              setMessage('Connection is slow but may still succeed...');
+            }
+          }, 5000);
+        }
+
         // Test both tables in parallel
         const [machinesResult, partsResult] = await Promise.all([
           supabase.from('machines').select('*', { count: 'exact' }),
@@ -22,41 +38,44 @@ export default function Home() {
           throw machinesResult.error || partsResult.error;
         }
 
-        setConnectionStatus('connected');
-        setMessage('Database connection successful!');
-        setStats({
-          machines: machinesResult.data?.length || 0,
-          parts: partsResult.data?.length || 0
-        });
+        if (isMounted) {
+          setConnectionStatus('connected');
+          setHasConnectedOnce(true);
+          setMessage('Database connection successful!');
+          setStats({
+            machines: machinesResult.data?.length || 0,
+            parts: partsResult.data?.length || 0
+          });
+        }
       } catch (error: any) {
-        setConnectionStatus('error');
-        setMessage(error.message || 'Failed to connect to database');
-        console.error('Database Error:', error);
+        if (isMounted) {
+          setConnectionStatus('error');
+          setMessage(error.message || 'Failed to connect to database');
+          console.error('Database Error:', error);
+        }
+      } finally {
+        if (connectionTimeout) clearTimeout(connectionTimeout);
       }
     }
 
-    const connectionTimeout = setTimeout(() => {
-      if (connectionStatus === 'connecting') {
-        setConnectionStatus('error');
-        setMessage('Connection timeout - check your network');
-      }
-    }, 5000);
-
     testConnection();
-    
-    return () => clearTimeout(connectionTimeout);
+
+    return () => {
+      isMounted = false;
+      if (connectionTimeout) clearTimeout(connectionTimeout);
+    };
   }, []);
 
   const statusColors = {
     connecting: 'bg-yellow-500',
     connected: 'bg-green-500',
-    error: 'bg-red-500'
+    error: hasConnectedOnce ? 'bg-green-500' : 'bg-red-500' // Show green if we've connected before
   };
 
   const statusIcons = {
     connecting: '🔄',
     connected: '✅',
-    error: '❌'
+    error: hasConnectedOnce ? '⚠️' : '❌' // Show warning instead of error if we've connected before
   };
 
   return (
@@ -83,12 +102,12 @@ export default function Home() {
               <span className="text-base sm:text-lg font-medium">
                 {connectionStatus === 'connecting' && 'Connecting to database...'}
                 {connectionStatus === 'connected' && 'Connected successfully'}
-                {connectionStatus === 'error' && 'Connection failed'}
+                {connectionStatus === 'error' && hasConnectedOnce ? 'Connection slow but working' : 'Connection failed'}
               </span>
             </div>
             <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300 mb-4">{message}</p>
             
-            {connectionStatus === 'connected' && stats && (
+            {(connectionStatus === 'connected' || (connectionStatus === 'error' && hasConnectedOnce)) && stats && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
                 <div className="bg-gray-50 dark:bg-gray-700 p-3 sm:p-4 rounded-lg">
                   <h3 className="text-sm sm:text-base font-medium text-gray-500 dark:text-gray-300">Total Machines</h3>
