@@ -17,9 +17,12 @@ const days = [
   { key: 'sun', label: 'Dom' }
 ] as const;
 
+type DayKey = keyof DailyHours;
+
 const WorkerTable: React.FC<WorkerTableProps> = ({ worker, onUpdate }) => {
-  const [editing, setEditing] = useState(false);
   const [inactiveHours, setInactiveHours] = useState<DailyHours>(worker.inactiveHours);
+  const [editingDay, setEditingDay] = useState<DayKey | null>(null);
+  const [tempValue, setTempValue] = useState('');
 
   useEffect(() => {
     console.log('Worker data:', {
@@ -29,128 +32,115 @@ const WorkerTable: React.FC<WorkerTableProps> = ({ worker, onUpdate }) => {
     });
   }, [worker]);
 
-  const handleInactiveHoursChange = (day: keyof DailyHours, value: string) => {
-    setInactiveHours(prev => ({
-      ...prev,
-      [day]: value
-    }));
+  const handleEditStart = (day: DayKey) => {
+    setEditingDay(day);
+    setTempValue(worker.inactiveHours[day]);
   };
 
-  const handleSave = () => {
-    const updatedWorker = {
-      ...worker,
-      inactiveHours,
-      efficiency: calculateEfficiency(worker.operations, worker.hoursWorked, inactiveHours)
-    };
-    onUpdate(updatedWorker);
-    setEditing(false);
+  const handleEditChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTempValue(e.target.value);
   };
 
-  const handleCancel = () => {
-    setInactiveHours(worker.inactiveHours);
-    setEditing(false);
+  const handleEditSave = () => {
+    if (editingDay) {
+      const updatedInactiveHours = {
+        ...inactiveHours,
+        [editingDay]: tempValue
+      };
+      
+      setInactiveHours(updatedInactiveHours);
+      
+      const updatedWorker = {
+        ...worker,
+        inactiveHours: updatedInactiveHours,
+        efficiency: calculateEfficiency(worker.operations, worker.hoursWorked, updatedInactiveHours)
+      };
+      
+      onUpdate(updatedWorker);
+    }
+    setEditingDay(null);
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleEditSave();
+    } else if (e.key === 'Escape') {
+      setEditingDay(null);
+    }
+  };
 
-// Replace the filteredOperations const with this:
-const filteredOperations = worker.operations.filter(op => {
-  // Skip if name is empty
-  if (!op.name?.trim()) return false;
-  
-  // Skip header-like rows
-  const lowerName = op.name.toLowerCase();
-  if (lowerName.includes("operación") || 
-      lowerName.includes("estilo") ||
-      lowerName.includes("orden") ||
-      lowerName.includes("meta") ||
-      lowerName.includes("total")) {
-    return false;
-  }
+  const filteredOperations = worker.operations.filter(op => {
+    if (!op.name?.trim()) return false;
+    
+    const lowerName = op.name.toLowerCase();
+    if (lowerName.includes("operación") || 
+        lowerName.includes("estilo") ||
+        lowerName.includes("orden") ||
+        lowerName.includes("meta") ||
+        lowerName.includes("total")) {
+      return false;
+    }
 
-  // Skip rows with all zeros and no meta
-  const hasProduction = days.some(day => op.dailyProduction[day.key] > 0);
-  const hasValidMeta = !isNaN(op.meta) && op.meta > 0;
-  
-  return hasProduction || hasValidMeta;
-});
+    const hasProduction = days.some(day => op.dailyProduction[day.key] > 0);
+    const hasValidMeta = !isNaN(op.meta) && op.meta > 0;
+    
+    return hasProduction || hasValidMeta;
+  });
 
   return (
     <div className="mb-8 bg-white rounded-lg shadow overflow-hidden">
-      <div className="px-6 py-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+      <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
         <h3 className="text-lg font-medium text-gray-900">
           {worker.id} / {worker.name}
         </h3>
-        {!editing ? (
-          <button
-            onClick={() => setEditing(true)}
-            className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            Edit
-          </button>
-        ) : (
-          <div className="space-x-2">
-            <button
-              onClick={handleSave}
-              className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
-            >
-              Save
-            </button>
-            <button
-              onClick={handleCancel}
-              className="px-3 py-1 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500"
-            >
-              Cancel
-            </button>
-          </div>
-        )}
       </div>
 
-<div className="overflow-x-auto">
-  <table className="min-w-full divide-y divide-gray-200">
-    <thead className="bg-gray-50">
-      <tr>
-        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Operación</th>
-        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estilo</th>
-        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Orden</th>
-        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Meta</th>
-        {days.map(day => (
-          <th key={day.key} className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
-            {day.label}
-          </th>
-        ))}
-        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-      </tr>
-    </thead>
-    <tbody className="bg-white divide-y divide-gray-200">
-      {filteredOperations.length > 0 ? (
-        filteredOperations.map((op, idx) => (
-          <tr key={idx}>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{op.name}</td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{op.style}</td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{op.order}</td>
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {isNaN(op.meta) ? '-' : op.meta}
-            </td>
-            {days.map(day => (
-              <td key={day.key} className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
-                {op.dailyProduction[day.key] || 0}
-              </td>
-            ))}
-            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {isNaN(op.total) ? '-' : op.total}
-            </td>
-          </tr>
-        ))
-      ) : (
-        <tr>
-          <td colSpan={11} className="px-6 py-4 text-center text-sm text-gray-500">
-            No hay datos de producción disponibles
-          </td>
-        </tr>
-      )}
-    </tbody>
-  </table>
-</div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Operación</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estilo</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Orden</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Meta</th>
+              {days.map(day => (
+                <th key={day.key} className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {day.label}
+                </th>
+              ))}
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {filteredOperations.length > 0 ? (
+              filteredOperations.map((op, idx) => (
+                <tr key={idx}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{op.name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{op.style}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{op.order}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {isNaN(op.meta) ? '-' : op.meta}
+                  </td>
+                  {days.map(day => (
+                    <td key={day.key} className="px-3 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+                      {op.dailyProduction[day.key] || 0}
+                    </td>
+                  ))}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {isNaN(op.total) ? '-' : op.total}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={11} className="px-6 py-4 text-center text-sm text-gray-500">
+                  No hay datos de producción disponibles
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
 
       <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -174,16 +164,24 @@ const filteredOperations = worker.operations.filter(op => {
               {days.map(day => (
                 <div key={day.key} className="text-center">
                   <div className="text-xs text-black">{day.label}</div>
-                  {editing ? (
+                  {editingDay === day.key ? (
                     <input
                       type="text"
-                      value={inactiveHours[day.key]}
-                      onChange={(e) => handleInactiveHoursChange(day.key, e.target.value)}
-                      className="w-full text-sm border rounded px-2 py-1"
+                      value={tempValue}
+                      onChange={handleEditChange}
+                      onBlur={handleEditSave}
+                      onKeyDown={handleKeyDown}
+                      autoFocus
+                      className="w-full text-sm border rounded px-2 py-1 text-center"
                       placeholder="HH:MM"
                     />
                   ) : (
-                    <div className="text-sm font-medium text-black">{worker.inactiveHours[day.key]}</div>
+                    <div 
+                      className="text-sm font-medium text-black cursor-pointer hover:bg-gray-100 rounded"
+                      onClick={() => handleEditStart(day.key)}
+                    >
+                      {worker.inactiveHours[day.key] || '0:00'}
+                    </div>
                   )}
                 </div>
               ))}
