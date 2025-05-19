@@ -19,12 +19,15 @@ export default function App({ Component, pageProps }: AppProps) {
   return (
     <div className="flex min-h-screen">
       <Sidebar />
+      
       <main className={`flex-1 transition-all duration-300
         ${sidebarCollapsed ? 'ml-20' : 'ml-64'}
         ${isMobile ? 'ml-0 pt-16' : ''}
         p-4 md:p-8
       `}>
-        <Component {...pageProps} />
+        <div className="max-w-full overflow-hidden">
+          <Component {...pageProps} />
+        </div>
       </main>
     </div>
   );

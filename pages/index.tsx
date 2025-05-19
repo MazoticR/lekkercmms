@@ -5,77 +5,117 @@ export default function Home() {
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
   const [message, setMessage] = useState<string>('Testing database connection...');
   const [stats, setStats] = useState<{ machines: number; parts: number } | null>(null);
+  const [hasConnectedOnce, setHasConnectedOnce] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
+    let connectionTimeout: NodeJS.Timeout;
+
     async function testConnection() {
       try {
-        // Test machines table connection
-        const { data: machinesData, error: machinesError } = await supabase
-          .from('machines')
-          .select('*', { count: 'exact' });
+        if (isMounted) {
+          setConnectionStatus('connecting');
+          setMessage('Testing database connection...');
+        }
 
-        if (machinesError) throw machinesError;
+        // Set timeout only if we haven't connected before
+        if (!hasConnectedOnce) {
+          connectionTimeout = setTimeout(() => {
+            if (isMounted && connectionStatus === 'connecting') {
+              setConnectionStatus('error');
+              setMessage('Connection is slow but may still succeed...');
+            }
+          }, 5000);
+        }
 
-        // Test machine_parts table connection
-        const { data: partsData, error: partsError } = await supabase
-          .from('machine_parts')
-          .select('*', { count: 'exact' });
+        // Test both tables in parallel
+        const [machinesResult, partsResult] = await Promise.all([
+          supabase.from('machines').select('*', { count: 'exact' }),
+          supabase.from('machine_parts').select('*', { count: 'exact' })
+        ]);
 
-        if (partsError) throw partsError;
+        if (machinesResult.error || partsResult.error) {
+          throw machinesResult.error || partsResult.error;
+        }
 
-        setConnectionStatus('connected');
-        setMessage('Database connection successful!');
-        setStats({
-          machines: machinesData.length,
-          parts: partsData.length
-        });
+        if (isMounted) {
+          setConnectionStatus('connected');
+          setHasConnectedOnce(true);
+          setMessage('Database connection successful!');
+          setStats({
+            machines: machinesResult.data?.length || 0,
+            parts: partsResult.data?.length || 0
+          });
+        }
       } catch (error: any) {
-        setConnectionStatus('error');
-        setMessage(`Connection error: ${error.message}`);
-        console.error('Supabase Error:', error);
+        if (isMounted) {
+          setConnectionStatus('error');
+          setMessage(error.message || 'Failed to connect to database');
+          console.error('Database Error:', error);
+        }
+      } finally {
+        if (connectionTimeout) clearTimeout(connectionTimeout);
       }
     }
 
     testConnection();
+
+    return () => {
+      isMounted = false;
+      if (connectionTimeout) clearTimeout(connectionTimeout);
+    };
   }, []);
 
   const statusColors = {
     connecting: 'bg-yellow-500',
     connected: 'bg-green-500',
-    error: 'bg-red-500'
+    error: hasConnectedOnce ? 'bg-green-500' : 'bg-red-500' // Show green if we've connected before
+  };
+
+  const statusIcons = {
+    connecting: '🔄',
+    connected: '✅',
+    error: hasConnectedOnce ? '⚠️' : '❌' // Show warning instead of error if we've connected before
   };
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 lg:p-8">
       <div className="max-w-4xl mx-auto">
-        <h1 className="text-4xl font-bold text-gray-800 mb-2">LekkerCMMS Dashboard</h1>
-        <p className="text-lg text-gray-600 mb-8">Your complete machine management solution</p>
+        <div className="mb-8">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-800 dark:text-white mb-2">
+            Lekker Dashboard
+          </h1>
+          <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300">
+            Compilation of stuff
+          </p>
+        </div>
 
         {/* Connection Status Card */}
-        <div className="bg-white rounded-xl shadow-md overflow-hidden mb-8">
-          <div className={`${statusColors[connectionStatus]} p-4 text-white`}>
-            <h2 className="text-xl font-semibold">Database Connection Status</h2>
+        <div className="card mb-6">
+          <div className={`${statusColors[connectionStatus]} p-4 text-white flex items-center`}>
+            <span className="mr-2 text-xl">{statusIcons[connectionStatus]}</span>
+            <h2 className="text-lg sm:text-xl font-semibold">Database Connection Status</h2>
           </div>
-          <div className="p-6">
-            <div className="flex items-center mb-4">
-              <div className={`w-4 h-4 rounded-full ${statusColors[connectionStatus]} mr-3`}></div>
-              <span className="text-lg font-medium">
+          <div className="p-4 sm:p-6">
+            <div className="flex items-center mb-3">
+              <div className={`w-3 h-3 sm:w-4 sm:h-4 rounded-full ${statusColors[connectionStatus]} mr-2 sm:mr-3`}></div>
+              <span className="text-base sm:text-lg font-medium">
                 {connectionStatus === 'connecting' && 'Connecting to database...'}
                 {connectionStatus === 'connected' && 'Connected successfully'}
-                {connectionStatus === 'error' && 'Connection failed'}
+                {connectionStatus === 'error' && hasConnectedOnce ? 'Connection slow but working' : 'Connection failed'}
               </span>
             </div>
-            <p className="text-gray-700 mb-4">{message}</p>
+            <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300 mb-4">{message}</p>
             
-            {connectionStatus === 'connected' && stats && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-medium text-gray-500">Total Machines</h3>
-                  <p className="text-3xl font-bold text-purple-600">{stats.machines}</p>
+            {(connectionStatus === 'connected' || (connectionStatus === 'error' && hasConnectedOnce)) && stats && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
+                <div className="bg-gray-50 dark:bg-gray-700 p-3 sm:p-4 rounded-lg">
+                  <h3 className="text-sm sm:text-base font-medium text-gray-500 dark:text-gray-300">Total Machines</h3>
+                  <p className="text-2xl sm:text-3xl font-bold text-purple-600 dark:text-purple-400">{stats.machines}</p>
                 </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-medium text-gray-500">Total Parts</h3>
-                  <p className="text-3xl font-bold text-purple-600">{stats.parts}</p>
+                <div className="bg-gray-50 dark:bg-gray-700 p-3 sm:p-4 rounded-lg">
+                  <h3 className="text-sm sm:text-base font-medium text-gray-500 dark:text-gray-300">Total Parts</h3>
+                  <p className="text-2xl sm:text-3xl font-bold text-purple-600 dark:text-purple-400">{stats.parts}</p>
                 </div>
               </div>
             )}
@@ -83,37 +123,39 @@ export default function Home() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow">
-            <h3 className="font-semibold text-lg mb-2 text-gray-800">Manage Machines</h3>
-            <p className="text-gray-600 mb-4">View and manage all your machines</p>
-            <a href="/machines" className="inline-block bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded transition duration-200">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
+          <div className="card p-4 sm:p-6">
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-2">Manage Machines</h3>
+            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mb-4">View and manage all your machines</p>
+            <a href="/machines" className="inline-block bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded text-sm sm:text-base transition duration-200">
               Go to Machines
             </a>
           </div>
-          <div className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow">
-            <h3 className="font-semibold text-lg mb-2 text-gray-800">Add New Machine</h3>
-            <p className="text-gray-600 mb-4">Register a new machine to your inventory</p>
-            <a href="/machines" className="inline-block bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded transition duration-200">
+          <div className="card p-4 sm:p-6">
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-2">Add New Machine</h3>
+            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mb-4">Register a new machine to your inventory</p>
+            <a href="/machines/new" className="inline-block bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded text-sm sm:text-base transition duration-200">
               Add Machine
             </a>
           </div>
-          <div className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow">
-            <h3 className="font-semibold text-lg mb-2 text-gray-800">System Health</h3>
-            <p className="text-gray-600 mb-4">Check system status and performance</p>
-            <button className="inline-block bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded transition duration-200">
+          <div className="card p-4 sm:p-6">
+            <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-2">System Health</h3>
+            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mb-4">Check system status and performance</p>
+            <button className="inline-block bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-white py-2 px-4 rounded text-sm sm:text-base transition duration-200">
               View Status
             </button>
           </div>
         </div>
 
-        {/* Recent Activity (placeholder) */}
-        <div className="bg-white rounded-xl shadow-md overflow-hidden">
+        {/* Recent Activity */}
+        <div className="card">
           <div className="bg-gray-800 p-4 text-white">
-            <h2 className="text-xl font-semibold">Recent Activity</h2>
+            <h2 className="text-lg sm:text-xl font-semibold">Recent Activity</h2>
           </div>
-          <div className="p-6">
-            <p className="text-gray-500 italic">Activity log will appear here once you start using the system</p>
+          <div className="p-4 sm:p-6">
+            <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400 italic">
+              Activity log will appear here once you start using the system
+            </p>
           </div>
         </div>
       </div>
