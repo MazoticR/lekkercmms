@@ -1,6 +1,6 @@
 // components/tools/PurchaseOrdersTool.tsx
 import { useState } from 'react';
-import styles from '../../styles/PurchaseOrders.module.css';
+import styles from '../../../styles/tools/PurchaseOrders.module.css';
 import { 
   PurchaseOrder, 
   Vendor,

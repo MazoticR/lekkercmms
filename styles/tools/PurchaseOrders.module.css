@@ -1,0 +1,78 @@
+/* styles/PurchaseOrders.module.css */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.controls {
+  margin: 20px 0;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+select, button {
+  padding: 8px 12px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
+button {
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+button:hover {
+  background-color: #45a049;
+}
+
+button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.tableContainer {
+  overflow-x: auto;
+  margin-top: 20px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+.poTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.poTable th {
+  background-color: #f5f5f5;
+  text-align: left;
+  padding: 12px 15px;
+  position: sticky;
+  top: 0;
+}
+
+.poTable td {
+  padding: 10px 15px;
+  border-bottom: 1px solid #ddd;
+}
+
+.poTable tr:hover {
+  background-color: #f9f9f9;
+}
+
+.numeric {
+  text-align: right;
+  font-family: 'Courier New', monospace;
+}
+
+.error {
+  color: #d9534f;
+  padding: 10px;
+  background-color: #f2dede;
+  border-radius: 4px;
+}
