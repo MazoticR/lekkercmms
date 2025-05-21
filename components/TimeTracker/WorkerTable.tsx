@@ -27,12 +27,21 @@ const WorkerTable: React.FC<WorkerTableProps> = ({ worker, onUpdate }) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    console.log('Worker data:', {
-      id: worker.id,
-      hours: worker.hoursWorked,
-      operations: worker.operations
-    });
-  }, [worker]);
+    // Calculate and update bonuses whenever operations change
+    const updatedWorker = {
+      ...worker,
+      bonus: {
+        mon: calculateDailyBonus(worker.operations, 'mon'),
+        tue: calculateDailyBonus(worker.operations, 'tue'),
+        wed: calculateDailyBonus(worker.operations, 'wed'),
+        thu: calculateDailyBonus(worker.operations, 'thu'),
+        fri: calculateDailyBonus(worker.operations, 'fri'),
+        sat: calculateDailyBonus(worker.operations, 'sat'),
+        sun: calculateDailyBonus(worker.operations, 'sun')
+      }
+    };
+    onUpdate(updatedWorker);
+  }, [worker.operations]);
 
   const calculateDailyBonus = (operations: Operation[], day: DayKey) => {
     return operations.reduce((total, op) => {

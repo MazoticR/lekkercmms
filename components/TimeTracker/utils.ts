@@ -242,29 +242,29 @@ export const generateExcelFile = async (workers: WorkerData[]): Promise<Blob> =>
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Workers Data');
 
-    // Define days for Excel export
-    const excelDays = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
-
-    // Add main headers
+    // Define headers (without ID and Nombre columns)
     const headers = [
-      'ID', 'Nombre', 'Operación', 'Estilo', 'Orden', 'Meta', 'Precio por hora',
+      'Operación', 'Estilo', 'Orden', 'Meta', 'Precio por hora',
       'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom',
-      'Total', 'Precio por pieza', 'Minutos por pieza',
-      'Horas trabajadas', 'Horas inactivas', 'Eficiencia', 'Bono'
+      'Total', 'Precio por pieza', 'Minutos por pieza'
     ];
-    worksheet.addRow(headers);
 
     workers.forEach(worker => {
-      // Add a blank row before each worker
-      worksheet.addRow([]);
+      // Add employee header section
+      worksheet.addRow([]); // Empty row
+      
+      // Add clean employee info header
+      const infoRow = worksheet.addRow([`ID: ${worker.id}`, `Nombre: ${worker.name}`]);
+      infoRow.font = { bold: true };
+      
+      worksheet.addRow([]); // Empty row
+      worksheet.addRow(headers); // Column headers (without ID/Name)
 
-      // Add operations data
+      // Add operations data (without ID/Name columns)
       for (const op of worker.operations) {
         if (isNaN(op.meta)) continue;
         
         worksheet.addRow([
-          worker.id, 
-          worker.name,
           op.name, 
           op.style, 
           op.order, 
@@ -279,65 +279,78 @@ export const generateExcelFile = async (workers: WorkerData[]): Promise<Blob> =>
           op.dailyProduction.sun, 
           op.total, 
           op.pricePerPiece, 
-          op.minutesPerPiece,
-          '', '', '', '' // Placeholders
+          op.minutesPerPiece
         ]);
       }
 
-      // Add summary rows with correct bonus values
-      worksheet.addRow([
-        worker.id, 
-        worker.name,
-        'Horas trabajadas', '', '', '', '',
-        worker.hoursWorked.mon, worker.hoursWorked.tue, worker.hoursWorked.wed,
-        worker.hoursWorked.thu, worker.hoursWorked.fri, worker.hoursWorked.sat,
-        worker.hoursWorked.sun, '', '', '',
-        '', '', ''
+      // Add summary rows (simplified without ID/Name)
+      const addSummaryRow = (label: string, values: (string | number)[]) => {
+        const row = worksheet.addRow([
+          label, '', '', '', '',
+          ...values,
+          ...Array(7).fill('')
+        ]);
+        return row;
+      };
+
+      addSummaryRow('Horas trabajadas', [
+        worker.hoursWorked.mon, 
+        worker.hoursWorked.tue, 
+        worker.hoursWorked.wed,
+        worker.hoursWorked.thu, 
+        worker.hoursWorked.fri, 
+        worker.hoursWorked.sat,
+        worker.hoursWorked.sun
       ]);
 
-      worksheet.addRow([
-        worker.id, 
-        worker.name,
-        'Horas inactivas', '', '', '', '',
-        worker.inactiveHours.mon, worker.inactiveHours.tue, worker.inactiveHours.wed,
-        worker.inactiveHours.thu, worker.inactiveHours.fri, worker.inactiveHours.sat,
-        worker.inactiveHours.sun, '', '', '',
-        '', '', ''
+      addSummaryRow('Horas inactivas', [
+        worker.inactiveHours.mon, 
+        worker.inactiveHours.tue, 
+        worker.inactiveHours.wed,
+        worker.inactiveHours.thu, 
+        worker.inactiveHours.fri, 
+        worker.inactiveHours.sat,
+        worker.inactiveHours.sun
       ]);
 
-      worksheet.addRow([
-        worker.id, 
-        worker.name,
-        'Eficiencia', '', '', '', '',
+      addSummaryRow('Eficiencia', [
         worker.efficiency.mon.toFixed(2), 
         worker.efficiency.tue.toFixed(2),
         worker.efficiency.wed.toFixed(2), 
         worker.efficiency.thu.toFixed(2),
         worker.efficiency.fri.toFixed(2), 
         worker.efficiency.sat.toFixed(2),
-        worker.efficiency.sun.toFixed(2), '', '', '',
-        '', '', ''
+        worker.efficiency.sun.toFixed(2)
       ]);
 
-      // Add bonus row with actual calculated values
-      worksheet.addRow([
-        worker.id, 
-        worker.name,
-        'Bono', '', '', '', '',
+      addSummaryRow('Bono', [
         worker.bonus?.mon || 0, 
         worker.bonus?.tue || 0,
         worker.bonus?.wed || 0,
         worker.bonus?.thu || 0,
         worker.bonus?.fri || 0,
         worker.bonus?.sat || 0,
-        worker.bonus?.sun || 0, '', '', '',
-        '', '', ''
+        worker.bonus?.sun || 0
       ]);
+
+      // Add empty row after each employee
+      worksheet.addRow([]);
     });
 
     // Style the worksheet
     worksheet.columns.forEach(column => {
       column.width = 15;
+    });
+
+    // Style headers
+    worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+      const firstCellValue = row.getCell(1).value;
+      if (typeof firstCellValue === 'string' && 
+          (firstCellValue.startsWith('ID:') || rowNumber === 1)) {
+        row.eachCell(cell => {
+          cell.font = { bold: true };
+        });
+      }
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
