@@ -237,51 +237,84 @@ export const calculateEfficiency = (
 export const generateExcelFile = async (workers: WorkerData[]): Promise<Blob> => {
   try {
     const workbook = new ExcelJS.Workbook();
-    
-    workers.forEach(worker => {
-      const worksheet = workbook.addWorksheet(worker.name.substring(0, 31));
+    const worksheet = workbook.addWorksheet('Workers Data'); // Single worksheet for all workers
 
-      worksheet.addRow([`${worker.id} / ${worker.name}`]);
+    // Add headers only once at the top
+    const headers = [
+      'ID', 'Nombre', 'Operación', 'Estilo', 'Orden', 'Meta', 'Precio por hora',
+      'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom',
+      'Total', 'Precio por pista', 'Minutos por pista',
+      'Horas trabajadas', 'Horas inactivas', 'Eficiencia', 'Bono'
+    ];
+    worksheet.addRow(headers);
+
+    // Add data for each worker
+    workers.forEach(worker => {
+      // Add a blank row before each worker for better readability
       worksheet.addRow([]);
 
-      worksheet.addRow([
-        'Operación', 'Estilo', 'Orden', 'Meta', 'Precio por hora',
-        'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom',
-        'Total', 'Precio por pista', 'Minutos por pista'
-      ]);
-
+      // Add operations data
       for (const op of worker.operations) {
         worksheet.addRow([
-          op.name, op.style, op.order, op.meta, op.pricePerHour,
-          op.dailyProduction.mon, op.dailyProduction.tue, op.dailyProduction.wed,
-          op.dailyProduction.thu, op.dailyProduction.fri, op.dailyProduction.sat,
-          op.dailyProduction.sun, op.total, op.pricePerPiece, op.minutesPerPiece
+          worker.id, 
+          worker.name,
+          op.name, 
+          op.style, 
+          op.order, 
+          op.meta, 
+          op.pricePerHour,
+          op.dailyProduction.mon, 
+          op.dailyProduction.tue, 
+          op.dailyProduction.wed,
+          op.dailyProduction.thu, 
+          op.dailyProduction.fri, 
+          op.dailyProduction.sat,
+          op.dailyProduction.sun, 
+          op.total, 
+          op.pricePerPiece, 
+          op.minutesPerPiece,
+          '', '', '', '' // Placeholders for hours, efficiency, bonus
         ]);
       }
 
+      // Add summary rows (hours worked, inactive hours, efficiency, bonus)
       worksheet.addRow([
+        worker.id, 
+        worker.name,
         'Horas trabajadas', '', '', '', '',
         worker.hoursWorked.mon, worker.hoursWorked.tue, worker.hoursWorked.wed,
         worker.hoursWorked.thu, worker.hoursWorked.fri, worker.hoursWorked.sat,
-        worker.hoursWorked.sun
+        worker.hoursWorked.sun, '', '', '',
+        '', '', '' // Placeholders
       ]);
 
       worksheet.addRow([
-        'Horas tiempo inactivo', '', '', '', '',
+        worker.id, 
+        worker.name,
+        'Horas inactivas', '', '', '', '',
         worker.inactiveHours.mon, worker.inactiveHours.tue, worker.inactiveHours.wed,
         worker.inactiveHours.thu, worker.inactiveHours.fri, worker.inactiveHours.sat,
-        worker.inactiveHours.sun
+        worker.inactiveHours.sun, '', '', '',
+        '', '', '' // Placeholders
       ]);
 
       worksheet.addRow([
-        'Eficiencia diaria', '', '', '', '',
-        worker.efficiency.mon.toFixed(2), worker.efficiency.tue.toFixed(2),
-        worker.efficiency.wed.toFixed(2), worker.efficiency.thu.toFixed(2),
-        worker.efficiency.fri.toFixed(2), worker.efficiency.sat.toFixed(2),
-        worker.efficiency.sun.toFixed(2)
+        worker.id, 
+        worker.name,
+        'Eficiencia', '', '', '', '',
+        worker.efficiency.mon.toFixed(2), 
+        worker.efficiency.tue.toFixed(2),
+        worker.efficiency.wed.toFixed(2), 
+        worker.efficiency.thu.toFixed(2),
+        worker.efficiency.fri.toFixed(2), 
+        worker.efficiency.sat.toFixed(2),
+        worker.efficiency.sun.toFixed(2), '', '', '',
+        '', '', '' // Placeholders
       ]);
 
       worksheet.addRow([
+        worker.id, 
+        worker.name,
         'Bono', '', '', '', '',
         worker.bonus?.mon || 0, 
         worker.bonus?.tue || 0,
@@ -289,8 +322,14 @@ export const generateExcelFile = async (workers: WorkerData[]): Promise<Blob> =>
         worker.bonus?.thu || 0,
         worker.bonus?.fri || 0,
         worker.bonus?.sat || 0,
-        worker.bonus?.sun || 0
+        worker.bonus?.sun || 0, '', '', '',
+        '', '', '' // Placeholders
       ]);
+    });
+
+    // Style the worksheet for better readability
+    worksheet.columns.forEach(column => {
+      column.width = 15;
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
