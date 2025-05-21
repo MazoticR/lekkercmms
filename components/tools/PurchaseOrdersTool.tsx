@@ -1,6 +1,6 @@
-// components/tools/PurchaseOrdersTool.tsx
+'use client';
+
 import { useState } from 'react';
-import styles from '../../styles/tools/PurchaseOrders.module.css';
 import { 
   PurchaseOrder, 
   Vendor,
@@ -48,7 +48,7 @@ export default function PurchaseOrdersTool() {
     const time = Math.floor(Date.now() / 1000);
     
     try {
-      const response = await fetch(`/api/vendors?token=${API_TOKEN}&time=${time}`);
+      const response = await fetch(`/api/proxy/vendors?token=${API_TOKEN}&time=${time}`);
       const data: { response?: Vendor[] } = await response.json();
       
       const newCache = {...vendorCache};
@@ -82,7 +82,7 @@ export default function PurchaseOrdersTool() {
         'parameters[1][value]': `${year}-${month.padStart(2, '0')}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`
       });
 
-      const response = await fetch(`/api/purchase_orders?${params}`);
+      const response = await fetch(`/api/proxy/purchase_orders?${params}`);
       const data: PurchaseOrdersResponse = await response.json();
       
       const filteredOrders = (data.response || []).filter((order) => 
@@ -113,7 +113,7 @@ export default function PurchaseOrdersTool() {
         'parameters[1][value]': `${year}-${month.padStart(2, '0')}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`
       });
 
-      const response = await fetch(`/api/purchase_orders?${params}`);
+      const response = await fetch(`/api/proxy/purchase_orders?${params}`);
       const data: PurchaseOrdersResponse = await response.json();
       
       const filteredOrders = (data.response || []).filter((order) => 
@@ -153,11 +153,12 @@ export default function PurchaseOrdersTool() {
   };
 
   return (
-    <div className={styles.container}>
-      <h1>POs por mes</h1>
+    <div className="max-w-[1200px] mx-auto p-5">
+      <h1 className="text-2xl font-bold mb-5">POs por mes</h1>
       
-      <div className={styles.controls}>
+      <div className="flex flex-wrap gap-2.5 items-center my-5">
         <select 
+          className="px-3 py-2 rounded border border-gray-300"
           value={year}
           onChange={(e) => setYear(e.target.value)}
         >
@@ -165,6 +166,7 @@ export default function PurchaseOrdersTool() {
         </select>
         
         <select 
+          className="px-3 py-2 rounded border border-gray-300"
           value={month}
           onChange={(e) => setMonth(e.target.value)}
         >
@@ -183,36 +185,46 @@ export default function PurchaseOrdersTool() {
         </select>
         
         <button 
+          className="px-3 py-2 rounded bg-green-600 text-white hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
           onClick={handleFetch}
           disabled={isLoading}
         >
           {isLoading ? 'Cargando...' : 'Generar Reporte'}
         </button>
-        <button onClick={handleExport}>
+        <button 
+          className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+          onClick={handleExport}
+        >
           Exportar a Excel
         </button>
       </div>
       
-      {error && <p className={styles.error}>{error}</p>}
+      {error && (
+        <div className="p-2.5 text-red-600 bg-red-100 rounded mb-5">
+          {error}
+        </div>
+      )}
       
       {orders.length > 0 ? (
-        <div className={styles.tableContainer}>
-          <h2>Órdenes de Compra - {getMonthName(month)}/{year}</h2>
-          <div className={styles.tableContainer}>
-            <table className={styles.poTable}>
+        <div className="overflow-hidden shadow-md rounded-lg mt-5">
+          <h2 className="text-xl font-semibold mb-3">
+            Órdenes de Compra - {getMonthName(month)}/{year}
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm [&_th]:bg-gray-100 [&_th]:sticky [&_th]:top-0 [&_th]:px-4 [&_th]:py-3 [&_td]:px-4 [&_td]:py-2.5 [&_td]:border-b [&_td]:border-gray-200 hover:[&_tr]:bg-gray-50">
               <thead>
                 <tr>
-                  <th>PO Number</th>
-                  <th>Vendor ID</th>
-                  <th>Vendor Name</th>
-                  <th>Item</th>
-                  <th>Material Description</th>
-                  <th>Status</th>
-                  <th>Department</th>
-                  <th>PO Date</th>
-                  <th>Due Date</th>
-                  <th>Total Units</th>
-                  <th>PO Total</th>
+                  <th className="text-left">PO Number</th>
+                  <th className="text-left">Vendor ID</th>
+                  <th className="text-left">Vendor Name</th>
+                  <th className="text-left">Item</th>
+                  <th className="text-left">Material Description</th>
+                  <th className="text-left">Status</th>
+                  <th className="text-left">Department</th>
+                  <th className="text-left">PO Date</th>
+                  <th className="text-left">Due Date</th>
+                  <th className="text-right">Total Units</th>
+                  <th className="text-right">PO Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -227,8 +239,8 @@ export default function PurchaseOrdersTool() {
                     <td>{order.division_id || ''}</td>
                     <td>{formatDisplayDate(order.date)}</td>
                     <td>{formatDisplayDate(order.date_due)}</td>
-                    <td className={styles.numeric}>{order.qty || 0}</td>
-                    <td className={styles.numeric}>{formatCurrency(order.amount)}</td>
+                    <td className="text-right font-mono">{order.qty || 0}</td>
+                    <td className="text-right font-mono">{formatCurrency(order.amount)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -236,7 +248,7 @@ export default function PurchaseOrdersTool() {
           </div>
         </div>
       ) : (
-        !isLoading && <p>No se encontraron órdenes de compra para este período</p>
+        !isLoading && <p className="text-gray-500">No se encontraron órdenes de compra para este período</p>
       )}
     </div>
   );
