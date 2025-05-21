@@ -24,8 +24,11 @@ export default function PurchaseOrdersTool() {
     'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
   ][parseInt(monthValue) - 1];
 
-  const formatDisplayDate = (dateString: string) => 
-    dateString ? dateString.split('/').reverse().join('/') : '';
+const formatDisplayDate = (dateString: string) => {
+  if (!dateString) return '';
+  const [month, day, year] = dateString.split('/');
+  return `${day}/${month}/${year}`;
+};
 
   const formatCurrency = (amount: number | string) => {
     if (!amount) return '$0.00';
@@ -65,92 +68,127 @@ export default function PurchaseOrdersTool() {
     }
   };
 
-  const handleFetch = async () => {
-    setIsLoading(true);
-    setError('');
+const handleFetch = async () => {
+  setIsLoading(true);
+  setError('');
+
+  try {
+    // Use the state values directly instead of trying to access select elements
+    const selectedYear = year;
+    const selectedMonth = month.padStart(2, '0');
     
-    try {
-      const time = Math.floor(Date.now() / 1000);
-      const params = new URLSearchParams({
-        token: API_TOKEN,
-        time: time.toString(),
-        'parameters[0][field]': 'date_internal',
-        'parameters[0][operator]': '>=',
-        'parameters[0][value]': `${year}-${month.padStart(2, '0')}-01`,
-        'parameters[1][field]': 'date_internal',
-        'parameters[1][operator]': '<=',
-        'parameters[1][value]': `${year}-${month.padStart(2, '0')}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`
+    // Fetch all purchase orders (no date filtering parameters)
+    const time = Math.floor(Date.now() / 1000);
+    const params = {
+      token: API_TOKEN,
+      time: time.toString()
+    };
+
+    const queryString = new URLSearchParams(params).toString();
+    const apiUrl = `/api/proxy/purchase_orders?${queryString}`;
+    console.log('API Request URL:', apiUrl);
+
+    const response = await fetch(apiUrl);
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('API Error Details:', {
+        status: response.status,
+        statusText: response.statusText,
+        url: response.url,
+        errorData
       });
-
-      const response = await fetch(`/api/proxy/purchase_orders?${params}`);
-      const data: PurchaseOrdersResponse = await response.json();
-      
-      const filteredOrders = (data.response || []).filter((order) => 
-        order.vendor_id && !EXCLUDED_VENDOR_IDS.includes(order.vendor_id)
-      );
-      
-      setOrders(filteredOrders);
-      await fetchVendorNames([...new Set(filteredOrders.map((o) => o.vendor_id))]);
-      
-    } catch (error) {
-      setError(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setIsLoading(false);
+      throw new Error(`API Error: ${response.status} ${response.statusText}`);
     }
-  };
+    
+    const data: PurchaseOrdersResponse = await response.json();
+    console.log('API Response Data:', data);
 
-  const handleExport = async () => {
-    try {
-      const time = Math.floor(Date.now() / 1000);
-      const params = new URLSearchParams({
-        token: API_TOKEN,
-        time: time.toString(),
-        'parameters[0][field]': 'date_internal',
-        'parameters[0][operator]': '>=',
-        'parameters[0][value]': `${year}-${month.padStart(2, '0')}-01`,
-        'parameters[1][field]': 'date_internal',
-        'parameters[1][operator]': '<=',
-        'parameters[1][value]': `${year}-${month.padStart(2, '0')}-${new Date(parseInt(year), parseInt(month), 0).getDate()}`
-      });
-
-      const response = await fetch(`/api/proxy/purchase_orders?${params}`);
-      const data: PurchaseOrdersResponse = await response.json();
-      
-      const filteredOrders = (data.response || []).filter((order) => 
-        order.vendor_id && !EXCLUDED_VENDOR_IDS.includes(order.vendor_id)
-      );
-
-      const csvContent = [
-        ['PO Number', 'Vendor ID', 'Vendor Name', 'Item', 'Material Description', 
-         'Status', 'Department', 'PO Date', 'Due Date', 'Total Units', 'PO Total'].join(','),
-        ...filteredOrders.map((order) => [
-          order.purchase_order_id || '',
-          order.vendor_id || '',
-          vendorCache[order.vendor_id] || 'Vendor no encontrado',
-          getFirstItemField(order, 'style_number'),
-          getFirstItemField(order, 'description'),
-          getStatus(order),
-          order.division_id || '',
-          formatDisplayDate(order.date),
-          formatDisplayDate(order.date_due),
-          order.qty || 0,
-          order.amount || 0
-        ].map(field => `"${String(field).replace(/"/g, '""')}"`).join(','))
-      ].join('\n');
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `ordenes_compra_${month}_${year}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-    } catch (error) {
-      alert(`Error al exportar: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    if (!data.response) {
+      throw new Error('Invalid API response structure');
     }
-  };
+
+    // Filter by month and year client-side (like in original HTML)
+    const filteredOrders = data.response.filter(order => {
+      if (!order.date) return false;
+      const [orderMonth, orderDay, orderYear] = order.date.split('/');
+      return orderYear === selectedYear && orderMonth === selectedMonth;
+    }).filter(order => 
+      order.vendor_id && !EXCLUDED_VENDOR_IDS.includes(order.vendor_id)
+    );
+    
+    setOrders(filteredOrders);
+    await fetchVendorNames([...new Set(filteredOrders.map(o => o.vendor_id))]);
+
+  } catch (error) {
+    console.error('Full Error:', error);
+    setError(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+const handleExport = async () => {
+  try {
+    // Use the same approach as handleFetch
+    const time = Math.floor(Date.now() / 1000);
+    const params = {
+      token: API_TOKEN,
+      time: time.toString()
+    };
+
+    const response = await fetch(`/api/proxy/purchase_orders?${new URLSearchParams(params)}`);
+    const data: PurchaseOrdersResponse = await response.json();
+    
+    // Filter the same way as in handleFetch
+    const selectedYear = year;
+    const selectedMonth = month.padStart(2, '0');
+    
+    const filteredOrders = (data.response || []).filter(order => {
+      if (!order.date) return false;
+      const [orderMonth, orderDay, orderYear] = order.date.split('/');
+      return orderYear === selectedYear && orderMonth === selectedMonth;
+    }).filter(order => 
+      order.vendor_id && !EXCLUDED_VENDOR_IDS.includes(order.vendor_id)
+    );
+
+    if (filteredOrders.length === 0) {
+      alert('No hay datos para exportar');
+      return;
+    }
+
+    const csvContent = [
+      ['PO Number', 'Vendor ID', 'Vendor Name', 'Item', 'Material Description', 
+       'Status', 'Department', 'PO Date', 'Due Date', 'Total Units', 'PO Total'].join(','),
+      ...filteredOrders.map((order) => [
+        order.purchase_order_id || '',
+        order.vendor_id || '',
+        vendorCache[order.vendor_id] || 'Vendor no encontrado',
+        getFirstItemField(order, 'style_number'),
+        getFirstItemField(order, 'description'),
+        getStatus(order),
+        order.division_id || '',
+        formatDisplayDate(order.date),
+        formatDisplayDate(order.date_due),
+        order.qty || 0,
+        order.amount || 0
+      ].map(field => `"${String(field).replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `ordenes_compra_${month}_${year}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+  } catch (error) {
+    console.error('Export error:', error);
+    alert(`Error al exportar: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+};
 
   return (
     <div className="max-w-[1200px] mx-auto p-5">

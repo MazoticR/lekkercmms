@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { WorkerData, DailyHours } from '@/types/timeTracker';
+import { WorkerData, DailyHours, Operation } from '@/types/timeTracker';
 import { calculateEfficiency } from './utils';
 
 interface WorkerTableProps {
@@ -31,6 +31,14 @@ const WorkerTable: React.FC<WorkerTableProps> = ({ worker, onUpdate }) => {
       operations: worker.operations
     });
   }, [worker]);
+
+  const calculateDailyBonus = (operations: Operation[], day: DayKey) => {
+    return operations.reduce((total, op) => {
+      const units = op.dailyProduction[day] || 0;
+      const pricePerPiece = op.pricePerPiece || 0;
+      return total + (units * pricePerPiece);
+    }, 0);
+  };
 
   const handleEditStart = (day: DayKey) => {
     setEditingDay(day);
@@ -143,14 +151,15 @@ const WorkerTable: React.FC<WorkerTableProps> = ({ worker, onUpdate }) => {
       </div>
 
       <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <h4 className="text-sm font-medium text-gray-700 mb-2">Horas trabajadas</h4>
-            <div className="grid grid-cols-7 gap-1">
+        {/* Hours Worked and Inactive Hours in one row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <h4 className="text-sm font-medium text-gray-700 mb-3">Horas trabajadas</h4>
+            <div className="grid grid-cols-7 gap-2">
               {days.map(day => (
                 <div key={day.key} className="text-center">
-                  <div className="text-xs text-black">{day.label}</div>
-                  <div className="text-sm font-medium text-black">
+                  <div className="text-xs text-gray-500 mb-1">{day.label}</div>
+                  <div className="text-sm font-medium text-gray-900">
                     {worker.hoursWorked[day.key] || '0:00'}
                   </div>
                 </div>
@@ -158,12 +167,12 @@ const WorkerTable: React.FC<WorkerTableProps> = ({ worker, onUpdate }) => {
             </div>
           </div>
 
-          <div>
-            <h4 className="text-sm font-medium text-gray-700 mb-2">Horas inactivas</h4>
-            <div className="grid grid-cols-7 gap-1">
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <h4 className="text-sm font-medium text-gray-700 mb-3">Horas inactivas</h4>
+            <div className="grid grid-cols-7 gap-2">
               {days.map(day => (
                 <div key={day.key} className="text-center">
-                  <div className="text-xs text-black">{day.label}</div>
+                  <div className="text-xs text-gray-500 mb-1">{day.label}</div>
                   {editingDay === day.key ? (
                     <input
                       type="text"
@@ -172,12 +181,12 @@ const WorkerTable: React.FC<WorkerTableProps> = ({ worker, onUpdate }) => {
                       onBlur={handleEditSave}
                       onKeyDown={handleKeyDown}
                       autoFocus
-                      className="w-full text-sm border rounded px-2 py-1 text-center"
+                      className="w-full text-sm border rounded px-2 py-1 text-center text-gray-900 bg-white"
                       placeholder="HH:MM"
                     />
                   ) : (
                     <div 
-                      className="text-sm font-medium text-black cursor-pointer hover:bg-gray-100 rounded"
+                      className="text-sm font-medium text-gray-900 cursor-pointer hover:bg-gray-100 rounded"
                       onClick={() => handleEditStart(day.key)}
                     >
                       {worker.inactiveHours[day.key] || '0:00'}
@@ -187,27 +196,43 @@ const WorkerTable: React.FC<WorkerTableProps> = ({ worker, onUpdate }) => {
               ))}
             </div>
           </div>
+        </div>
 
-          <div>
-            <h4 className="text-sm font-medium text-gray-700 mb-2">Eficiencia</h4>
-            <div className="grid grid-cols-7 gap-1">
-              {days.map(day => (
-                <div key={day.key} className="text-center">
-                  <div className="text-xs text-gray-500">{day.label}</div>
-                  <div
-                    className={`text-sm font-medium ${
-                      worker.efficiency[day.key] >= 100
-                        ? 'text-green-600'
-                        : worker.efficiency[day.key] >= 80
-                        ? 'text-yellow-600'
-                        : 'text-red-600'
-                    }`}
-                  >
-                    {isNaN(worker.efficiency[day.key]) ? '0%' : worker.efficiency[day.key].toFixed(2) + '%'}
-                  </div>
+        {/* Efficiency in its own row */}
+        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
+          <h4 className="text-sm font-medium text-gray-700 mb-3">Eficiencia</h4>
+          <div className="grid grid-cols-7 gap-2">
+            {days.map(day => (
+              <div key={day.key} className="text-center">
+                <div className="text-xs text-gray-500 mb-1">{day.label}</div>
+                <div
+                  className={`text-sm font-medium ${
+                    worker.efficiency[day.key] >= 100
+                      ? 'text-green-600'
+                      : worker.efficiency[day.key] >= 80
+                      ? 'text-yellow-600'
+                      : 'text-red-600'
+                  }`}
+                >
+                  {isNaN(worker.efficiency[day.key]) ? '0%' : worker.efficiency[day.key].toFixed(2) + '%'}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Bonus in its own row */}
+        <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+          <h4 className="text-sm font-medium text-gray-700 mb-3">Bono</h4>
+          <div className="grid grid-cols-7 gap-2">
+            {days.map(day => (
+              <div key={day.key} className="text-center">
+                <div className="text-xs text-gray-500 mb-1">{day.label}</div>
+                <div className="text-sm font-medium text-green-600">
+                  ${calculateDailyBonus(worker.operations, day.key).toFixed(2)}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>

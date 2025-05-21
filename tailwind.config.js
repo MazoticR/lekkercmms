@@ -7,26 +7,35 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        background: '#EAF2CE', // Lightest green
+        foreground: '#0D0D0D', // Dark text
         primary: {
-          light: '#a78bfa',
-          DEFAULT: '#8b5cf6',
-          dark: '#7c3aed',
+          light: '#DFF2B6',   // Light green
+          DEFAULT: '#88BF50', // Primary green
+          dark: '#76A646',    // Dark green
         },
-        secondary: {
-          light: '#f0abfc',
-          DEFAULT: '#d946ef',
-          dark: '#c026d3',
+        accent: '#0D0D0D',    // For contrast
+        card: {
+          bg: '#FFFFFF',
+          border: '#DFF2B6',
         },
         sidebar: {
-          DEFAULT: '#6d28d9',
-          hover: '#7c3aed',
-          active: '#5b21b6',
-          text: '#ffffff',
-        },
+          DEFAULT: '#76A646',    // Dark green
+          light: '#88BF50',      // Primary green
+          lighter: '#DFF2B6',    // Light green
+          text: '#FFFFFF',       // White text
+          secondary: '#EAF2CE',  // Lightest green
+        }
+      },
+      backgroundColor: {
+        DEFAULT: '#EAF2CE', // Lightest green background
+      },
+      textColor: {
+        DEFAULT: '#0D0D0D', // Dark text
       },
       screens: {
-        'xs': '480px', // Extra small screens
-        'sidebar-collapse': '768px', // Breakpoint for sidebar collapse
+        'xs': '480px',
+        'sidebar-collapse': '768px',
       },
       transitionProperty: {
         'width': 'width',
