@@ -3,19 +3,14 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --card-bg: #ffffff;
-  --card-border: #e5e7eb;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0f172a;
-    --foreground: #f8fafc;
-    --card-bg: #1e293b;
-    --card-border: #334155;
-  }
+  --background: #EAF2CE;       /* Lightest green */
+  --foreground: #0D0D0D;       /* Dark text */
+  --primary: #88BF50;          /* Primary green */
+  --primary-dark: #76A646;     /* Dark green */
+  --primary-light: #DFF2B6;    /* Light green */
+  
+  --card-bg: #FFFFFF;
+  --card-border: #DFF2B6;
 }
 
 /* Base styles */
@@ -29,6 +24,17 @@ body {
   color: var(--foreground);
   background: var(--background);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Primary color utilities */
+.bg-primary {
+  background-color: var(--primary);
+}
+.text-primary {
+  color: var(--primary);
+}
+.border-primary {
+  border-color: var(--primary);
 }
 
 /* Card styles */
@@ -66,12 +72,6 @@ th {
 
 tr:nth-child(even) {
   background-color: rgba(0, 0, 0, 0.02);
-}
-
-@media (prefers-color-scheme: dark) {
-  tr:nth-child(even) {
-    background-color: rgba(255, 255, 255, 0.05);
-  }
 }
 
 /* Mobile optimizations */

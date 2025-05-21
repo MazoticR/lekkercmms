@@ -23,21 +23,22 @@ export default function Sidebar() {
   const menuItems = [
     { href: '/', icon: '🏠', label: 'Home' },
     { href: '/machines', icon: '📊', label: 'Machines' },
-    { href: '/inventory', icon: '📦', label: 'Inventory' },
+    { href: '/time-tracker', icon: '⏳', label: 'Efficiencias' },
+    { href: '/tools/purchase-orders', icon: '💸', label: 'POs ApparelMagic' },
   ];
 
   return (
-    <div className={`fixed left-0 top-0 h-screen bg-gradient-to-b from-purple-900 to-purple-700 text-white shadow-lg transition-all duration-300 z-50
+    <div className={`fixed left-0 top-0 h-screen bg-gradient-to-b from-sidebar to-sidebar-light text-sidebar-text shadow-lg transition-all duration-300 z-50
       ${isCollapsed ? 'w-20' : 'w-64'}
       ${isMobile && !isCollapsed ? 'w-full' : ''}
     `}>
-      <div className={`p-4 flex items-center justify-between border-b border-purple-600
+      <div className={`p-4 flex items-center justify-between border-b border-sidebar-lighter
         ${isCollapsed ? 'flex-col h-20' : ''}
       `}>
         {!isCollapsed && <div className="text-2xl font-bold">LekkerCMMS</div>}
         <button 
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-2 rounded-full hover:bg-purple-600 transition-colors"
+          className="p-2 rounded-full hover:bg-sidebar-light transition-colors"
         >
           {isCollapsed ? '➡️' : '⬅️'}
         </button>
@@ -49,8 +50,8 @@ export default function Sidebar() {
             <li key={item.href}>
               <Link href={item.href}>
                 <div
-                  className={`flex items-center p-3 rounded-lg transition-all hover:bg-purple-600
-                    ${router.pathname === item.href ? 'bg-purple-800' : ''}
+                  className={`flex items-center p-3 rounded-lg transition-all hover:bg-sidebar-light
+                    ${router.pathname === item.href ? 'bg-sidebar' : ''}
                     ${isCollapsed ? 'justify-center' : ''}
                   `}
                 >
@@ -63,17 +64,17 @@ export default function Sidebar() {
         </ul>
       </nav>
       
-      <div className={`absolute bottom-0 w-full p-4 border-t border-purple-600
+      <div className={`absolute bottom-0 w-full p-4 border-t border-sidebar-lighter
         ${isCollapsed ? 'flex justify-center' : ''}
       `}>
         <div className={`flex items-center ${isCollapsed ? 'flex-col' : ''}`}>
-          <div className="w-10 h-10 rounded-full bg-purple-500 flex items-center justify-center mr-3">
+          <div className="w-10 h-10 rounded-full bg-sidebar-light flex items-center justify-center mr-3">
             <span>👤</span>
           </div>
           {!isCollapsed && (
             <div>
               <div className="font-medium">Admin User</div>
-              <div className="text-xs text-purple-200">admin@lekkercmms.com</div>
+              <div className="text-xs text-sidebar-secondary">admin@lekkercmms.com</div>
             </div>
           )}
         </div>

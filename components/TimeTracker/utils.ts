@@ -243,7 +243,7 @@ export const generateExcelFile = async (workers: WorkerData[]): Promise<Blob> =>
     const headers = [
       'ID', 'Nombre', 'Operación', 'Estilo', 'Orden', 'Meta', 'Precio por hora',
       'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom',
-      'Total', 'Precio por pista', 'Minutos por pista',
+      'Total', 'Precio por pieza', 'Minutos por pieza',
       'Horas trabajadas', 'Horas inactivas', 'Eficiencia', 'Bono'
     ];
     worksheet.addRow(headers);
@@ -254,28 +254,33 @@ export const generateExcelFile = async (workers: WorkerData[]): Promise<Blob> =>
       worksheet.addRow([]);
 
       // Add operations data
-      for (const op of worker.operations) {
-        worksheet.addRow([
-          worker.id, 
-          worker.name,
-          op.name, 
-          op.style, 
-          op.order, 
-          op.meta, 
-          op.pricePerHour,
-          op.dailyProduction.mon, 
-          op.dailyProduction.tue, 
-          op.dailyProduction.wed,
-          op.dailyProduction.thu, 
-          op.dailyProduction.fri, 
-          op.dailyProduction.sat,
-          op.dailyProduction.sun, 
-          op.total, 
-          op.pricePerPiece, 
-          op.minutesPerPiece,
-          '', '', '', '' // Placeholders for hours, efficiency, bonus
-        ]);
-      }
+          for (const op of worker.operations) {
+            // Skip operations that have NaN values in critical fields
+            if (isNaN(op.meta) || isNaN(op.pricePerHour) || isNaN(op.total)) {
+              continue; // Skip this operation
+            }
+            
+            worksheet.addRow([
+              worker.id, 
+              worker.name,
+              op.name, 
+              op.style, 
+              op.order, 
+              op.meta, 
+              op.pricePerHour,
+              op.dailyProduction.mon, 
+              op.dailyProduction.tue, 
+              op.dailyProduction.wed,
+              op.dailyProduction.thu, 
+              op.dailyProduction.fri, 
+              op.dailyProduction.sat,
+              op.dailyProduction.sun, 
+              op.total, 
+              op.pricePerPiece, 
+              op.minutesPerPiece,
+              '', '', '', '' // Placeholders for hours, efficiency, bonus
+            ]);
+          }
 
       // Add summary rows (hours worked, inactive hours, efficiency, bonus)
       worksheet.addRow([

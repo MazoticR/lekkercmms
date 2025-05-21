@@ -1,44 +1,72 @@
-// pages/api/proxy/[...route].ts
 import type { NextApiRequest, NextApiResponse } from 'next';
-import proxyHandler from '../../../lib/proxy';
 
-interface CustomApiRequest extends NextApiRequest {
-  query: {
-    route: string | string[];
-    [key: string]: string | string[] | undefined;
-  };
-}
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  // Handle CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Safely handle the route parameter
-  const routePath = Array.isArray(req.query.route) 
-    ? req.query.route.join('/')
-    : req.query.route || '';
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
 
-  // Convert Next.js request to Node.js-style request
-  const nodeReq = {
-    ...req,
-    url: `/api/${routePath}`,
-    method: req.method,
-    query: req.query
-  };
+  try {
+    const { token, time, ...params } = req.query;
+    const route = Array.isArray(req.query.route) ? req.query.route.join('/') : '';
 
-  // Create a mock response object
-  const nodeRes = {
-    ...res,
-    status: (code: number) => ({
-      ...res,
-      statusCode: code,
-      json: (data: any) => res.status(code).json(data),
-      end: () => res.end()
-    }),
-    setHeader: (name: string, value: string) => {
-      res.setHeader(name, value);
-      return nodeRes;
-    },
-    json: (data: any) => res.json(data)
-  };
+    if (!token || !time) {
+      return res.status(400).json({ error: "Missing required parameters" });
+    }
 
-  // Call your existing proxy
-  return proxyHandler(nodeReq, nodeRes);
+    const baseUrl = 'https://secura.app.apparelmagic.com/api';
+    const url = new URL(`${baseUrl}/${route}`);
+
+    // Add all parameters
+    url.searchParams.append('token', token as string);
+    url.searchParams.append('time', time as string);
+    
+    // Add additional parameters
+    Object.entries(params).forEach(([key, value]) => {
+      if (typeof value === 'string') {
+        url.searchParams.append(key, value);
+      }
+    });
+
+    console.log('Proxying to:', url.toString()); // Debug log
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('Upstream API Error:', {
+        status: response.status,
+        statusText: response.statusText,
+        url: response.url,
+        errorData
+      });
+      return res.status(response.status).json({ 
+        error: "Upstream API error",
+        status: response.status,
+        details: errorData
+      });
+    }
+    
+    const data = await response.json();
+    res.status(200).json(data);
+
+  } catch (error) {
+    console.error('Proxy error:', error);
+    res.status(500).json({ 
+      error: "Proxy request failed",
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
 }

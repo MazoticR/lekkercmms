@@ -172,7 +172,7 @@ const WorkerTable: React.FC<WorkerTableProps> = ({ worker, onUpdate }) => {
                       onBlur={handleEditSave}
                       onKeyDown={handleKeyDown}
                       autoFocus
-                      className="w-full text-sm border rounded px-2 py-1 text-center"
+                      className="w-full text-sm border rounded px-2 py-1 text-center text-black bg-white"
                       placeholder="HH:MM"
                     />
                   ) : (
