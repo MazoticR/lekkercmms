@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { WorkerData, DailyHours, Operation } from '@/types/timeTracker';
-import { calculateEfficiency } from './utils';
+import { calculateEfficiency, formatTimeFromExcel } from './utils';
 
 interface WorkerTableProps {
   worker: WorkerData;
@@ -21,8 +21,10 @@ type DayKey = keyof DailyHours;
 
 const WorkerTable: React.FC<WorkerTableProps> = ({ worker, onUpdate }) => {
   const [inactiveHours, setInactiveHours] = useState<DailyHours>(worker.inactiveHours);
-  const [editingDay, setEditingDay] = useState<DayKey | null>(null);
-  const [tempValue, setTempValue] = useState('');
+  const [hoursWorked, setHoursWorked] = useState<DailyHours>(worker.hoursWorked);
+  const [editing, setEditing] = useState<{type: 'worked' | 'inactive', day: DayKey} | null>(null);
+  const [tempValue, setTempValue] = useState<string>('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     console.log('Worker data:', {
@@ -40,40 +42,67 @@ const WorkerTable: React.FC<WorkerTableProps> = ({ worker, onUpdate }) => {
     }, 0);
   };
 
-  const handleEditStart = (day: DayKey) => {
-    setEditingDay(day);
-    setTempValue(worker.inactiveHours[day]);
+  const handleEditStart = (type: 'worked' | 'inactive', day: DayKey) => {
+    setEditing({type, day});
+    setTempValue(type === 'worked' ? hoursWorked[day] : inactiveHours[day]);
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.select();
+      }
+    }, 10);
   };
 
   const handleEditChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setTempValue(e.target.value);
+    // Allow only numbers, decimal points, and colons
+    const value = e.target.value.replace(/[^\d:.]/g, '');
+    setTempValue(value);
+  };
+
+  const formatTimeInput = (value: string): string => {
+    if (!value) return '0:00';
+    return formatTimeFromExcel(value);
   };
 
   const handleEditSave = () => {
-    if (editingDay) {
-      const updatedInactiveHours = {
-        ...inactiveHours,
-        [editingDay]: tempValue
-      };
-      
-      setInactiveHours(updatedInactiveHours);
-      
-      const updatedWorker = {
-        ...worker,
-        inactiveHours: updatedInactiveHours,
-        efficiency: calculateEfficiency(worker.operations, worker.hoursWorked, updatedInactiveHours)
-      };
-      
-      onUpdate(updatedWorker);
+    if (editing) {
+      const formattedValue = formatTimeInput(tempValue);
+
+      if (editing.type === 'worked') {
+        const updatedHoursWorked = {
+          ...hoursWorked,
+          [editing.day]: formattedValue
+        };
+        setHoursWorked(updatedHoursWorked);
+        
+        const updatedWorker = {
+          ...worker,
+          hoursWorked: updatedHoursWorked,
+          efficiency: calculateEfficiency(worker.operations, updatedHoursWorked, inactiveHours)
+        };
+        onUpdate(updatedWorker);
+      } else {
+        const updatedInactiveHours = {
+          ...inactiveHours,
+          [editing.day]: formattedValue
+        };
+        setInactiveHours(updatedInactiveHours);
+        
+        const updatedWorker = {
+          ...worker,
+          inactiveHours: updatedInactiveHours,
+          efficiency: calculateEfficiency(worker.operations, hoursWorked, updatedInactiveHours)
+        };
+        onUpdate(updatedWorker);
+      }
     }
-    setEditingDay(null);
+    setEditing(null);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       handleEditSave();
     } else if (e.key === 'Escape') {
-      setEditingDay(null);
+      setEditing(null);
     }
   };
 
@@ -157,24 +186,11 @@ const WorkerTable: React.FC<WorkerTableProps> = ({ worker, onUpdate }) => {
             <h4 className="text-sm font-medium text-gray-700 mb-3">Horas trabajadas</h4>
             <div className="grid grid-cols-7 gap-2">
               {days.map(day => (
-                <div key={day.key} className="text-center">
+                <div key={`worked-${day.key}`} className="text-center">
                   <div className="text-xs text-gray-500 mb-1">{day.label}</div>
-                  <div className="text-sm font-medium text-gray-900">
-                    {worker.hoursWorked[day.key] || '0:00'}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-            <h4 className="text-sm font-medium text-gray-700 mb-3">Horas inactivas</h4>
-            <div className="grid grid-cols-7 gap-2">
-              {days.map(day => (
-                <div key={day.key} className="text-center">
-                  <div className="text-xs text-gray-500 mb-1">{day.label}</div>
-                  {editingDay === day.key ? (
+                  {editing?.type === 'worked' && editing.day === day.key ? (
                     <input
+                      ref={inputRef}
                       type="text"
                       value={tempValue}
                       onChange={handleEditChange}
@@ -187,9 +203,40 @@ const WorkerTable: React.FC<WorkerTableProps> = ({ worker, onUpdate }) => {
                   ) : (
                     <div 
                       className="text-sm font-medium text-gray-900 cursor-pointer hover:bg-gray-100 rounded"
-                      onClick={() => handleEditStart(day.key)}
+                      onClick={() => handleEditStart('worked', day.key)}
                     >
-                      {worker.inactiveHours[day.key] || '0:00'}
+                      {hoursWorked[day.key] || '0:00'}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
+            <h4 className="text-sm font-medium text-gray-700 mb-3">Horas inactivas</h4>
+            <div className="grid grid-cols-7 gap-2">
+              {days.map(day => (
+                <div key={`inactive-${day.key}`} className="text-center">
+                  <div className="text-xs text-gray-500 mb-1">{day.label}</div>
+                  {editing?.type === 'inactive' && editing.day === day.key ? (
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={tempValue}
+                      onChange={handleEditChange}
+                      onBlur={handleEditSave}
+                      onKeyDown={handleKeyDown}
+                      autoFocus
+                      className="w-full text-sm border rounded px-2 py-1 text-center text-gray-900 bg-white"
+                      placeholder="HH:MM"
+                    />
+                  ) : (
+                    <div 
+                      className="text-sm font-medium text-gray-900 cursor-pointer hover:bg-gray-100 rounded"
+                      onClick={() => handleEditStart('inactive', day.key)}
+                    >
+                      {inactiveHours[day.key] || '0:00'}
                     </div>
                   )}
                 </div>
@@ -203,7 +250,7 @@ const WorkerTable: React.FC<WorkerTableProps> = ({ worker, onUpdate }) => {
           <h4 className="text-sm font-medium text-gray-700 mb-3">Eficiencia</h4>
           <div className="grid grid-cols-7 gap-2">
             {days.map(day => (
-              <div key={day.key} className="text-center">
+              <div key={`efficiency-${day.key}`} className="text-center">
                 <div className="text-xs text-gray-500 mb-1">{day.label}</div>
                 <div
                   className={`text-sm font-medium ${
@@ -226,7 +273,7 @@ const WorkerTable: React.FC<WorkerTableProps> = ({ worker, onUpdate }) => {
           <h4 className="text-sm font-medium text-gray-700 mb-3">Bono</h4>
           <div className="grid grid-cols-7 gap-2">
             {days.map(day => (
-              <div key={day.key} className="text-center">
+              <div key={`bonus-${day.key}`} className="text-center">
                 <div className="text-xs text-gray-500 mb-1">{day.label}</div>
                 <div className="text-sm font-medium text-green-600">
                   ${calculateDailyBonus(worker.operations, day.key).toFixed(2)}
