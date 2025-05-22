@@ -8,6 +8,7 @@ interface Machine {
   name: string;
   location: string;
   status: MachineStatus;
+  last_updated?: string;
 }
 
 interface MachinePart {
@@ -20,6 +21,7 @@ interface MachinePart {
   notes: string | null;
   times_replaced: number;
   cost: number | null;
+  last_updated?: string;
 }
 
 interface InventoryPart {
@@ -88,7 +90,8 @@ const MachineDetailPage = () => {
     const { data, error } = await supabase
       .from('machine_parts')
       .select('*')
-      .eq('machine_id', machineId);
+      .eq('machine_id', machineId)
+      .order('last_updated', { ascending: false });
     if (error) {
       console.error('Error fetching machine parts:', error);
     } else {
@@ -108,19 +111,12 @@ const MachineDetailPage = () => {
     }
   }
 
-  async function updateStatus(newStatus: MachineStatus) {
-    if (!machineId || !machine) return;
-    
-    const { error } = await supabase
+  async function updateMachineTimestamp() {
+    await supabase
       .from('machines')
-      .update({ status: newStatus })
+      .update({ last_updated: new Date().toISOString() })
       .eq('id', machineId);
-    
-    if (error) {
-      console.error('Error updating status:', error);
-    } else {
-      fetchMachine();
-    }
+    fetchMachine(); // Refresh machine data
   }
 
   async function deletePart(partId: number) {
@@ -134,76 +130,78 @@ const MachineDetailPage = () => {
     if (error) {
       console.error('Error deleting part:', error);
     } else {
+      await updateMachineTimestamp();
       fetchParts();
     }
   }
 
-// Update the addPart function to this:
-async function addPart(e: FormEvent) {
-  e.preventDefault();
-  if (!selectedInventoryPart) return;
-  
-  const selectedPart = inventoryParts.find(part => part.id === selectedInventoryPart);
-  if (!selectedPart) return;
-
-  const existingPart = parts.find(part => part.inventory_part_id === selectedInventoryPart);
-
-  // Use the form cost if provided, otherwise use the inventory part cost
-  const partCost = cost !== null ? cost : selectedPart.cost;
-
-  if (existingPart) {
-    const { error } = await supabase
-      .from('machine_parts')
-      .update({
-        last_replaced_date: lastReplacedDate ? lastReplacedDate : null,
-        notes: notes || null,
-        times_replaced: (existingPart.times_replaced || 0) + 1,
-        cost: partCost  // Add this line
-      })
-      .eq('id', existingPart.id);
+  async function addPart(e: FormEvent) {
+    e.preventDefault();
+    if (!selectedInventoryPart) return;
     
-    if (error) {
-      console.error('Error updating part:', error);
-    } else {
-      setSelectedInventoryPart(null);
-      setLastReplacedDate('');
-      setNotes('');
-      setCost(null);
-      setSearchTerm('');
-      fetchParts();
-    }
-  } else {
-    const newPart = {
-      machine_id: machineId,
-      part_name: selectedPart.part_number,
-      code: selectedPart.description || '',
+    const selectedPart = inventoryParts.find(part => part.id === selectedInventoryPart);
+    if (!selectedPart) return;
+
+    const existingPart = parts.find(part => part.inventory_part_id === selectedInventoryPart);
+
+    const partData = {
       last_replaced_date: lastReplacedDate ? lastReplacedDate : null,
-      inventory_part_id: selectedInventoryPart,
       notes: notes || null,
-      times_replaced: 1,
-      cost: partCost  // Add this line
+      cost: cost !== null ? cost : selectedPart.cost || null,
+      last_updated: new Date().toISOString()
     };
 
-    const { error } = await supabase
-      .from('machine_parts')
-      .insert(newPart);
-    
-    if (error) {
-      console.error('Error adding part:', error);
-    } else {
-      setSelectedInventoryPart(null);
-      setLastReplacedDate('');
-      setNotes('');
-      setCost(null);
-      setSearchTerm('');
-      fetchParts();
+    if (existingPart) {
+      const { error } = await supabase
+        .from('machine_parts')
+        .update({
+          ...partData,
+          times_replaced: (existingPart.times_replaced || 0) + 1
+        })
+        .eq('id', existingPart.id);
       
-      await supabase.rpc('decrement_inventory', {
-        part_id: selectedInventoryPart
-      });
+      if (error) {
+        console.error('Error updating part:', error);
+      } else {
+        resetForm();
+        await updateMachineTimestamp();
+        fetchParts();
+      }
+    } else {
+      const newPart = {
+        machine_id: machineId,
+        part_name: selectedPart.part_number,
+        code: selectedPart.description || '',
+        inventory_part_id: selectedInventoryPart,
+        times_replaced: 1,
+        ...partData
+      };
+
+      const { error } = await supabase
+        .from('machine_parts')
+        .insert(newPart);
+      
+      if (error) {
+        console.error('Error adding part:', error);
+      } else {
+        resetForm();
+        await updateMachineTimestamp();
+        fetchParts();
+        
+        await supabase.rpc('decrement_inventory', {
+          part_id: selectedInventoryPart
+        });
+      }
     }
   }
-}
+
+  function resetForm() {
+    setSelectedInventoryPart(null);
+    setLastReplacedDate('');
+    setNotes('');
+    setCost(null);
+    setSearchTerm('');
+  }
 
   return (
     <div className="p-8 w-full min-w-fit overflow-x-auto">
@@ -220,26 +218,29 @@ async function addPart(e: FormEvent) {
       {machine ? (
         <div>
           <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-            <h1 className="text-2xl font-bold text-gray-800 mb-2">{machine.name}</h1>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex justify-between items-start">
               <div>
-                <p className="text-sm text-gray-500">Location</p>
-                <p className="text-gray-700">{machine.location}</p>
+                <h1 className="text-2xl font-bold text-gray-800 mb-2">{machine.name}</h1>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Location</p>
+                    <p className="text-gray-700">{machine.location}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Last Updated</p>
+                    <p className="text-gray-700">
+                      {machine.last_updated ? new Date(machine.last_updated).toLocaleString() : 'Unknown'}
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-gray-500">Status</p>
-                <select
-                  value={machine.status}
-                  onChange={(e) => updateStatus(e.target.value as MachineStatus)}
-                  className="mt-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  {MACHINE_STATUSES.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                machine.status === 'operational' ? 'bg-green-100 text-green-800' :
+                machine.status === 'maintenance' ? 'bg-yellow-100 text-yellow-800' :
+                'bg-red-100 text-red-800'
+              }`}>
+                {MACHINE_STATUSES.find(s => s.value === machine.status)?.label}
+              </span>
             </div>
           </div>
 
@@ -326,6 +327,7 @@ async function addPart(e: FormEvent) {
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Replaced</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Times Replaced</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
@@ -351,6 +353,9 @@ async function addPart(e: FormEvent) {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {part.times_replaced || 0}
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {part.last_updated ? new Date(part.last_updated).toLocaleString() : 'N/A'}
+                        </td>
                         <td className="px-6 py-4 text-sm text-gray-500">
                           {part.notes || 'N/A'}
                         </td>
@@ -366,7 +371,7 @@ async function addPart(e: FormEvent) {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">
+                      <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
                         No parts found
                       </td>
                     </tr>
