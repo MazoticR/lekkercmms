@@ -8,6 +8,8 @@ interface Machine {
   name: string;
   location: string;
   status: MachineStatus;
+  last_updated?: string;
+  total_parts_cost?: number;
 }
 
 const MachinesPage = () => {
@@ -15,6 +17,7 @@ const MachinesPage = () => {
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
   const [status, setStatus] = useState<MachineStatus>('operational');
+  const [editingMachine, setEditingMachine] = useState<Machine | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -22,26 +25,50 @@ const MachinesPage = () => {
   }, []);
 
   async function fetchMachines() {
-    const { data, error } = await supabase
+    const { data: machinesData, error: machinesError } = await supabase
       .from('machines')
       .select('*')
-      .order('id', { ascending: true });
-    if (error) {
-      console.error('Error fetching machines:', error);
-    } else {
-      setMachines(data || []);
+      .order('last_updated', { ascending: false });
+
+    if (machinesError) {
+      console.error('Error fetching machines:', machinesError);
+      return;
     }
+
+    // Fetch total parts cost for each machine
+    const machinesWithCosts = await Promise.all(
+      machinesData.map(async (machine) => {
+        const { data: partsData, error: partsError } = await supabase
+          .from('machine_parts')
+          .select('cost')
+          .eq('machine_id', machine.id);
+
+        if (partsError) {
+          console.error('Error fetching parts:', partsError);
+          return { ...machine, total_parts_cost: 0 };
+        }
+
+        const totalCost = partsData.reduce((sum, part) => sum + (part.cost || 0), 0);
+        return { ...machine, total_parts_cost: totalCost };
+      })
+    );
+
+    setMachines(machinesWithCosts || []);
   }
 
   async function addMachine(e: FormEvent) {
     e.preventDefault();
     if (!name.trim() || !location.trim()) return;
+    
     const newMachine = {
       name: name.trim(),
       location: location.trim(),
-      status
+      status,
+      last_updated: new Date().toISOString()
     };
+
     const { error } = await supabase.from('machines').insert(newMachine);
+    
     if (error) {
       console.error('Error adding machine:', error);
     } else {
@@ -52,12 +79,79 @@ const MachinesPage = () => {
     }
   }
 
+async function updateMachine(e: FormEvent) {
+  e.preventDefault();
+  if (!editingMachine) return;
+  
+  const { error } = await supabase
+    .from('machines')
+    .update({
+      name: name.trim(),
+      location: location.trim(),
+      status,
+      last_updated: new Date().toISOString() // Update timestamp
+    })
+    .eq('id', editingMachine.id);
+
+  if (error) {
+    console.error('Error updating machine:', error);
+  } else {
+    // Reset form and refresh
+    cancelEdit();
+    fetchMachines();
+  }
+}
+
+  async function deleteMachine(id: number) {
+    if (!confirm('Are you sure you want to delete this machine? This will also delete all its parts.')) return;
+    
+    // First delete all parts associated with this machine
+    const { error: partsError } = await supabase
+      .from('machine_parts')
+      .delete()
+      .eq('machine_id', id);
+
+    if (partsError) {
+      console.error('Error deleting parts:', partsError);
+      return;
+    }
+
+    // Then delete the machine
+    const { error: machineError } = await supabase
+      .from('machines')
+      .delete()
+      .eq('id', id);
+
+    if (machineError) {
+      console.error('Error deleting machine:', machineError);
+    } else {
+      fetchMachines();
+    }
+  }
+
+  function startEdit(machine: Machine) {
+    setEditingMachine(machine);
+    setName(machine.name);
+    setLocation(machine.location);
+    setStatus(machine.status);
+  }
+
+  function cancelEdit() {
+    setEditingMachine(null);
+    setName('');
+    setLocation('');
+    setStatus('operational');
+  }
+
   return (
     <div className="p-8">
       <h1 className="text-3xl font-bold mb-6 text-gray-800">Machines Management</h1>
       
-      {/* Form to add a new machine */}
-      <form onSubmit={addMachine} className="bg-white p-6 rounded-lg shadow-md mb-8">
+      {/* Form to add/edit a machine */}
+      <form onSubmit={editingMachine ? updateMachine : addMachine} className="bg-white p-6 rounded-lg shadow-md mb-8">
+        <h2 className="text-xl font-semibold mb-4 text-gray-700">
+          {editingMachine ? 'Edit Machine' : 'Add New Machine'}
+        </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <input
             type="text"
@@ -87,12 +181,23 @@ const MachinesPage = () => {
             ))}
           </select>
         </div>
-        <button 
-          type="submit" 
-          className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded transition duration-200"
-        >
-          Add Machine
-        </button>
+        <div className="flex space-x-2">
+          <button 
+            type="submit" 
+            className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded transition duration-200"
+          >
+            {editingMachine ? 'Update Machine' : 'Add Machine'}
+          </button>
+          {editingMachine && (
+            <button
+              type="button"
+              onClick={cancelEdit}
+              className="bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded transition duration-200"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
       </form>
 
       {/* Table listing all machines */}
@@ -100,24 +205,34 @@ const MachinesPage = () => {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Machine Name</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Parts Cost</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {machines.length > 0 ? (
               machines.map((machine) => (
-                <tr
-                  key={machine.id}
-                  onClick={() => router.push(`/machines/${machine.id}`)}
-                  className="hover:bg-gray-50 cursor-pointer transition duration-150"
-                >
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{machine.id}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{machine.name}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{machine.location}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                <tr key={machine.id} className="hover:bg-gray-50 transition duration-150">
+                  <td 
+                    className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 cursor-pointer"
+                    onClick={() => router.push(`/machines/${machine.id}`)}
+                  >
+                    {machine.name}
+                  </td>
+                  <td 
+                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer"
+                    onClick={() => router.push(`/machines/${machine.id}`)}
+                  >
+                    {machine.location}
+                  </td>
+                  <td 
+                    className="px-6 py-4 whitespace-nowrap cursor-pointer"
+                    onClick={() => router.push(`/machines/${machine.id}`)}
+                  >
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       machine.status === 'operational' ? 'bg-green-100 text-green-800' :
                       machine.status === 'maintenance' ? 'bg-yellow-100 text-yellow-800' :
@@ -127,11 +242,45 @@ const MachinesPage = () => {
                       {MACHINE_STATUSES.find(s => s.value === machine.status)?.label}
                     </span>
                   </td>
+                  <td 
+                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer"
+                    onClick={() => router.push(`/machines/${machine.id}`)}
+                  >
+                    ${machine.total_parts_cost?.toFixed(2) || '0.00'}
+                  </td>
+                  <td 
+                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer"
+                    onClick={() => router.push(`/machines/${machine.id}`)}
+                  >
+                    {machine.last_updated ? new Date(machine.last_updated).toLocaleString() : 'N/A'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startEdit(machine);
+                        }}
+                        className="text-blue-600 hover:text-blue-800"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteMachine(machine.id);
+                        }}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500">No machines found</td>
+                <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">No machines found</td>
               </tr>
             )}
           </tbody>

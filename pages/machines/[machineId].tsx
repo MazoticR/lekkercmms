@@ -8,6 +8,7 @@ interface Machine {
   name: string;
   location: string;
   status: MachineStatus;
+  last_updated?: string;
 }
 
 interface MachinePart {
@@ -19,6 +20,8 @@ interface MachinePart {
   inventory_part_id: number | null;
   notes: string | null;
   times_replaced: number;
+  cost: number | null;
+  last_updated?: string;
 }
 
 interface InventoryPart {
@@ -38,6 +41,7 @@ const MachineDetailPage = () => {
   const [selectedInventoryPart, setSelectedInventoryPart] = useState<number | null>(null);
   const [lastReplacedDate, setLastReplacedDate] = useState('');
   const [notes, setNotes] = useState('');
+  const [cost, setCost] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<InventoryPart[]>([]);
 
@@ -63,6 +67,12 @@ const MachineDetailPage = () => {
     setSearchResults(results);
   }, [searchTerm, inventoryParts]);
 
+  const calculateTotalCost = () => {
+    return parts.reduce((total, part) => {
+      return total + (part.cost || 0);
+    }, 0);
+  };
+
   async function fetchMachine() {
     const { data, error } = await supabase
       .from('machines')
@@ -80,7 +90,8 @@ const MachineDetailPage = () => {
     const { data, error } = await supabase
       .from('machine_parts')
       .select('*')
-      .eq('machine_id', machineId);
+      .eq('machine_id', machineId)
+      .order('last_updated', { ascending: false });
     if (error) {
       console.error('Error fetching machine parts:', error);
     } else {
@@ -100,18 +111,27 @@ const MachineDetailPage = () => {
     }
   }
 
-  async function updateStatus(newStatus: MachineStatus) {
-    if (!machineId || !machine) return;
+  async function updateMachineTimestamp() {
+    await supabase
+      .from('machines')
+      .update({ last_updated: new Date().toISOString() })
+      .eq('id', machineId);
+    fetchMachine(); // Refresh machine data
+  }
+
+  async function deletePart(partId: number) {
+    if (!confirm('Are you sure you want to delete this part?')) return;
     
     const { error } = await supabase
-      .from('machines')
-      .update({ status: newStatus })
-      .eq('id', machineId);
+      .from('machine_parts')
+      .delete()
+      .eq('id', partId);
     
     if (error) {
-      console.error('Error updating status:', error);
+      console.error('Error deleting part:', error);
     } else {
-      fetchMachine();
+      await updateMachineTimestamp();
+      fetchParts();
     }
   }
 
@@ -122,16 +142,20 @@ const MachineDetailPage = () => {
     const selectedPart = inventoryParts.find(part => part.id === selectedInventoryPart);
     if (!selectedPart) return;
 
-    // Check if part already exists on this machine
     const existingPart = parts.find(part => part.inventory_part_id === selectedInventoryPart);
 
+    const partData = {
+      last_replaced_date: lastReplacedDate ? lastReplacedDate : null,
+      notes: notes || null,
+      cost: cost !== null ? cost : selectedPart.cost || null,
+      last_updated: new Date().toISOString()
+    };
+
     if (existingPart) {
-      // Update existing part
       const { error } = await supabase
         .from('machine_parts')
         .update({
-          last_replaced_date: lastReplacedDate ? lastReplacedDate : null,
-          notes: notes || null,
+          ...partData,
           times_replaced: (existingPart.times_replaced || 0) + 1
         })
         .eq('id', existingPart.id);
@@ -139,22 +163,18 @@ const MachineDetailPage = () => {
       if (error) {
         console.error('Error updating part:', error);
       } else {
-        setSelectedInventoryPart(null);
-        setLastReplacedDate('');
-        setNotes('');
-        setSearchTerm('');
+        resetForm();
+        await updateMachineTimestamp();
         fetchParts();
       }
     } else {
-      // Add new part
       const newPart = {
         machine_id: machineId,
         part_name: selectedPart.part_number,
         code: selectedPart.description || '',
-        last_replaced_date: lastReplacedDate ? lastReplacedDate : null,
         inventory_part_id: selectedInventoryPart,
-        notes: notes || null,
-        times_replaced: 1
+        times_replaced: 1,
+        ...partData
       };
 
       const { error } = await supabase
@@ -164,13 +184,10 @@ const MachineDetailPage = () => {
       if (error) {
         console.error('Error adding part:', error);
       } else {
-        setSelectedInventoryPart(null);
-        setLastReplacedDate('');
-        setNotes('');
-        setSearchTerm('');
+        resetForm();
+        await updateMachineTimestamp();
         fetchParts();
         
-        // Deduct from inventory
         await supabase.rpc('decrement_inventory', {
           part_id: selectedInventoryPart
         });
@@ -178,8 +195,16 @@ const MachineDetailPage = () => {
     }
   }
 
+  function resetForm() {
+    setSelectedInventoryPart(null);
+    setLastReplacedDate('');
+    setNotes('');
+    setCost(null);
+    setSearchTerm('');
+  }
+
   return (
-    <div className="p-8">
+    <div className="p-8 w-full min-w-fit overflow-x-auto">
       <button 
         onClick={() => router.push('/machines')} 
         className="flex items-center text-purple-600 hover:text-purple-800 mb-6 transition duration-200"
@@ -193,33 +218,36 @@ const MachineDetailPage = () => {
       {machine ? (
         <div>
           <div className="bg-white p-6 rounded-lg shadow-md mb-8">
-            <h1 className="text-2xl font-bold text-gray-800 mb-2">{machine.name}</h1>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="flex justify-between items-start">
               <div>
-                <p className="text-sm text-gray-500">Location</p>
-                <p className="text-gray-700">{machine.location}</p>
+                <h1 className="text-2xl font-bold text-gray-800 mb-2">{machine.name}</h1>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Location</p>
+                    <p className="text-gray-700">{machine.location}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Last Updated</p>
+                    <p className="text-gray-700">
+                      {machine.last_updated ? new Date(machine.last_updated).toLocaleString() : 'Unknown'}
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-gray-500">Status</p>
-                <select
-                  value={machine.status}
-                  onChange={(e) => updateStatus(e.target.value as MachineStatus)}
-                  className="mt-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  {MACHINE_STATUSES.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                machine.status === 'operational' ? 'bg-green-100 text-green-800' :
+                machine.status === 'maintenance' ? 'bg-yellow-100 text-yellow-800' :
+                'bg-red-100 text-red-800'
+              }`}>
+                {MACHINE_STATUSES.find(s => s.value === machine.status)?.label}
+              </span>
             </div>
           </div>
 
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Machine Parts</h2>
 
           <form onSubmit={addPart} className="bg-white p-6 rounded-lg shadow-md mb-8">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
               <div className="relative">
                 <input
                   type="text"
@@ -242,14 +270,15 @@ const MachineDetailPage = () => {
                         onClick={() => {
                           setSelectedInventoryPart(part.id);
                           setSearchTerm(`${part.part_number} - ${part.description || ''}`);
+                          setCost(part.cost);
                           setSearchResults([]);
                         }}
                       >
                         <div className="font-medium">{part.part_number}</div>
                         <div className="text-sm text-gray-600">{part.description}</div>
-                        {part.cost && (
-                          <div className="text-sm text-green-600">${part.cost.toFixed(2)}</div>
-                        )}
+                        <div className="text-sm text-green-600">
+                          {part.cost ? `$${part.cost.toFixed(2)}` : 'No price set'}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -260,6 +289,15 @@ const MachineDetailPage = () => {
                 placeholder="Last Replaced Date"
                 value={lastReplacedDate}
                 onChange={(e) => setLastReplacedDate(e.target.value)}
+                className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Cost"
+                value={cost || ''}
+                onChange={(e) => setCost(e.target.value ? parseFloat(e.target.value) : null)}
                 className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
               <input
@@ -279,49 +317,77 @@ const MachineDetailPage = () => {
             </button>
           </form>
 
-          <div className="bg-white rounded-lg shadow-md overflow-hidden table-container">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part Number</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Replaced</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Times Replaced</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {parts.length > 0 ? (
-                  parts.map((part) => (
-                    <tr key={part.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {part.part_name}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {part.code}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {part.last_replaced_date
-                          ? new Date(part.last_replaced_date).toLocaleDateString()
-                          : 'N/A'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {part.times_replaced || 0}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-500">
-                        {part.notes || 'N/A'}
+          <div className="bg-white rounded-lg shadow-md overflow-x-auto w-full">
+            <div className="min-w-[800px]">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part Number</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Replaced</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Times Replaced</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {parts.length > 0 ? (
+                    parts.map((part) => (
+                      <tr key={part.id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {part.part_name}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {part.code}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {part.cost ? `$${part.cost.toFixed(2)}` : 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {part.last_replaced_date
+                            ? new Date(part.last_replaced_date).toLocaleDateString()
+                            : 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {part.times_replaced || 0}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {part.last_updated ? new Date(part.last_updated).toLocaleString() : 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-500">
+                          {part.notes || 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <button
+                            onClick={() => deletePart(part.id)}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
+                        No parts found
                       </td>
                     </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
-                      No parts found
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="mt-4 text-right">
+            <div className="inline-block bg-gray-50 px-4 py-2 rounded-lg">
+              <span className="font-medium">Total Parts Cost: </span>
+              <span className="text-green-600 font-bold">
+                ${calculateTotalCost().toFixed(2)}
+              </span>
+            </div>
           </div>
         </div>
       ) : (
