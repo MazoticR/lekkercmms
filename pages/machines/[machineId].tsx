@@ -17,12 +17,15 @@ interface MachinePart {
   code: string;
   last_replaced_date: string | null;
   inventory_part_id: number | null;
+  notes: string | null;
+  times_replaced: number;
 }
 
 interface InventoryPart {
   id: number;
   part_number: string;
   description: string | null;
+  cost: number | null;
 }
 
 const MachineDetailPage = () => {
@@ -34,14 +37,31 @@ const MachineDetailPage = () => {
   const [inventoryParts, setInventoryParts] = useState<InventoryPart[]>([]);
   const [selectedInventoryPart, setSelectedInventoryPart] = useState<number | null>(null);
   const [lastReplacedDate, setLastReplacedDate] = useState('');
+  const [notes, setNotes] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState<InventoryPart[]>([]);
 
- useEffect(() => {
+  useEffect(() => {
     if (machineId) {
       fetchMachine();
       fetchParts();
       fetchInventoryParts();
     }
   }, [machineId]);
+
+  useEffect(() => {
+    if (searchTerm.trim() === '') {
+      setSearchResults([]);
+      return;
+    }
+
+    const results = inventoryParts.filter(part => 
+      part.part_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (part.description && part.description.toLowerCase().includes(searchTerm.toLowerCase())))
+      .slice(0, 5);
+    
+    setSearchResults(results);
+  }, [searchTerm, inventoryParts]);
 
   async function fetchMachine() {
     const { data, error } = await supabase
@@ -68,11 +88,10 @@ const MachineDetailPage = () => {
     }
   }
 
-  
   async function fetchInventoryParts() {
     const { data, error } = await supabase
       .from('inventory_parts')
-      .select('id, part_number, description')
+      .select('id, part_number, description, cost')
       .order('part_number', { ascending: true });
     if (error) {
       console.error('Error fetching inventory parts:', error);
@@ -80,7 +99,6 @@ const MachineDetailPage = () => {
       setInventoryParts(data || []);
     }
   }
-
 
   async function updateStatus(newStatus: MachineStatus) {
     if (!machineId || !machine) return;
@@ -98,37 +116,67 @@ const MachineDetailPage = () => {
   }
 
   async function addPart(e: FormEvent) {
-  e.preventDefault();
-  if (!selectedInventoryPart) return;
-  
-  const selectedPart = inventoryParts.find(part => part.id === selectedInventoryPart);
-  if (!selectedPart) return;
-
-  const newPart = {
-    machine_id: machineId,
-    part_name: selectedPart.part_number,  // Use part_number from inventory
-    code: selectedPart.description || '', // Use description from inventory
-    last_replaced_date: lastReplacedDate ? lastReplacedDate : null,
-    inventory_part_id: selectedInventoryPart  // Link to inventory item
-  };
-
-  const { error } = await supabase
-    .from('machine_parts')
-    .insert(newPart);
-  
-  if (error) {
-    console.error('Error adding part:', error);
-  } else {
-    setSelectedInventoryPart(null);
-    setLastReplacedDate('');
-    fetchParts();
+    e.preventDefault();
+    if (!selectedInventoryPart) return;
     
-    // Deduct from inventory (optional)
-    await supabase.rpc('decrement_inventory', {
-      part_id: selectedInventoryPart
-    });
+    const selectedPart = inventoryParts.find(part => part.id === selectedInventoryPart);
+    if (!selectedPart) return;
+
+    // Check if part already exists on this machine
+    const existingPart = parts.find(part => part.inventory_part_id === selectedInventoryPart);
+
+    if (existingPart) {
+      // Update existing part
+      const { error } = await supabase
+        .from('machine_parts')
+        .update({
+          last_replaced_date: lastReplacedDate ? lastReplacedDate : null,
+          notes: notes || null,
+          times_replaced: (existingPart.times_replaced || 0) + 1
+        })
+        .eq('id', existingPart.id);
+      
+      if (error) {
+        console.error('Error updating part:', error);
+      } else {
+        setSelectedInventoryPart(null);
+        setLastReplacedDate('');
+        setNotes('');
+        setSearchTerm('');
+        fetchParts();
+      }
+    } else {
+      // Add new part
+      const newPart = {
+        machine_id: machineId,
+        part_name: selectedPart.part_number,
+        code: selectedPart.description || '',
+        last_replaced_date: lastReplacedDate ? lastReplacedDate : null,
+        inventory_part_id: selectedInventoryPart,
+        notes: notes || null,
+        times_replaced: 1
+      };
+
+      const { error } = await supabase
+        .from('machine_parts')
+        .insert(newPart);
+      
+      if (error) {
+        console.error('Error adding part:', error);
+      } else {
+        setSelectedInventoryPart(null);
+        setLastReplacedDate('');
+        setNotes('');
+        setSearchTerm('');
+        fetchParts();
+        
+        // Deduct from inventory
+        await supabase.rpc('decrement_inventory', {
+          part_id: selectedInventoryPart
+        });
+      }
+    }
   }
-}
 
   return (
     <div className="p-8">
@@ -168,68 +216,108 @@ const MachineDetailPage = () => {
             </div>
           </div>
 
-<h2 className="text-xl font-semibold text-gray-800 mb-4">Machine Parts</h2>
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">Machine Parts</h2>
 
-      {/* Updated Form to add a new part */}
-      <form onSubmit={addPart} className="bg-white p-6 rounded-lg shadow-md mb-8">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-          <select
-            value={selectedInventoryPart || ''}
-            onChange={(e) => setSelectedInventoryPart(e.target.value ? parseInt(e.target.value) : null)}
-            required
-            className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-          >
-            <option value="">Select Inventory Part</option>
-            {inventoryParts.map((part) => (
-              <option key={part.id} value={part.id}>
-                {part.part_number} - {part.description || 'No description'}
-              </option>
-            ))}
-          </select>
-          <input
-            type="date"
-            placeholder="Last Replaced Date"
-            value={lastReplacedDate}
-            onChange={(e) => setLastReplacedDate(e.target.value)}
-            className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-          />
-        </div>
-        <button 
-          type="submit" 
-          className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded transition duration-200"
-        >
-          Add Part
-        </button>
-      </form>
+          <form onSubmit={addPart} className="bg-white p-6 rounded-lg shadow-md mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search by part number or description"
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setSelectedInventoryPart(null);
+                  }}
+                  className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                {searchResults.length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg">
+                    {searchResults.map((part) => (
+                      <div
+                        key={part.id}
+                        className={`p-2 hover:bg-gray-100 cursor-pointer ${
+                          selectedInventoryPart === part.id ? 'bg-purple-100' : ''
+                        }`}
+                        onClick={() => {
+                          setSelectedInventoryPart(part.id);
+                          setSearchTerm(`${part.part_number} - ${part.description || ''}`);
+                          setSearchResults([]);
+                        }}
+                      >
+                        <div className="font-medium">{part.part_number}</div>
+                        <div className="text-sm text-gray-600">{part.description}</div>
+                        {part.cost && (
+                          <div className="text-sm text-green-600">${part.cost.toFixed(2)}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <input
+                type="date"
+                placeholder="Last Replaced Date"
+                value={lastReplacedDate}
+                onChange={(e) => setLastReplacedDate(e.target.value)}
+                className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+              <input
+                type="text"
+                placeholder="Notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+            <button 
+              type="submit" 
+              className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded transition duration-200"
+              disabled={!selectedInventoryPart}
+            >
+              {parts.some(p => p.inventory_part_id === selectedInventoryPart) ? 'Update Part' : 'Add Part'}
+            </button>
+          </form>
 
-          {/* Table listing all parts for this machine */}
-          <div className="bg-white rounded-lg shadow-md overflow-hidden">
+          <div className="bg-white rounded-lg shadow-md overflow-hidden table-container">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Replaced Date</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part Number</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Replaced</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Times Replaced</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {parts.length > 0 ? (
                   parts.map((part) => (
                     <tr key={part.id}>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{part.id}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{part.part_name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{part.code}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {part.part_name}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {part.code}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {part.last_replaced_date
                           ? new Date(part.last_replaced_date).toLocaleDateString()
                           : 'N/A'}
                       </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {part.times_replaced || 0}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-500">
+                        {part.notes || 'N/A'}
+                      </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={4} className="px-6 py-4 text-center text-sm text-gray-500">No parts found</td>
+                    <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
+                      No parts found
+                    </td>
                   </tr>
                 )}
               </tbody>

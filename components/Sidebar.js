@@ -6,8 +6,12 @@ export default function Sidebar() {
   const router = useRouter();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [openMenus, setOpenMenus] = useState({});
 
+  // Initialize with Tools menu open by default
   useEffect(() => {
+    setOpenMenus({ 'Tools': true });
+    
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768);
       if (window.innerWidth < 768) {
@@ -20,11 +24,25 @@ export default function Sidebar() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const toggleMenu = (label) => {
+    setOpenMenus(prev => ({
+      ...prev,
+      [label]: !prev[label]
+    }));
+  };
+
   const menuItems = [
-    { href: '/', icon: '🏠', label: 'Home' },
-    { href: '/machines', icon: '📊', label: 'Machines' },
-    { href: '/time-tracker', icon: '⏳', label: 'Efficiencias' },
-    { href: '/tools/purchase-orders', icon: '💸', label: 'POs ApparelMagic' },
+    { href: '/', icon: 'home', label: 'Home' },
+    { href: '/machines', icon: 'bar_chart', label: 'Machines' },
+    { href: '/time-tracker', icon: 'timer', label: 'Efficiencies' },
+    { 
+      label: 'Tools', 
+      icon: 'build',
+      items: [
+        { href: '/tools/purchase-orders', icon: 'receipt', label: 'POs ApparelMagic' },
+        // Add more tool items here
+      ]
+    }
   ];
 
   return (
@@ -40,25 +58,67 @@ export default function Sidebar() {
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="p-2 rounded-full hover:bg-sidebar-light transition-colors"
         >
-          {isCollapsed ? '➡️' : '⬅️'}
+          <span className="material-icons">
+            {isCollapsed ? 'chevron_right' : 'chevron_left'}
+          </span>
         </button>
       </div>
       
-      <nav className="p-4">
+      <nav className="p-4 overflow-y-auto h-[calc(100vh-180px)]">
         <ul className="space-y-2">
           {menuItems.map((item) => (
-            <li key={item.href}>
-              <Link href={item.href}>
-                <div
-                  className={`flex items-center p-3 rounded-lg transition-all hover:bg-sidebar-light
-                    ${router.pathname === item.href ? 'bg-sidebar' : ''}
-                    ${isCollapsed ? 'justify-center' : ''}
-                  `}
-                >
-                  <span className={`text-xl ${isCollapsed ? 'mr-0' : 'mr-3'}`}>{item.icon}</span>
-                  {!isCollapsed && <span>{item.label}</span>}
-                </div>
-              </Link>
+            <li key={item.label}>
+              {item.href ? (
+                <Link href={item.href} passHref>
+                  <div
+                    className={`flex items-center p-3 rounded-lg transition-all hover:bg-sidebar-light
+                      ${router.pathname === item.href ? 'bg-sidebar' : ''}
+                      ${isCollapsed ? 'justify-center' : ''}
+                    `}
+                  >
+                    <span className={`material-icons ${isCollapsed ? 'mr-0' : 'mr-3'}`}>{item.icon}</span>
+                    {!isCollapsed && <span>{item.label}</span>}
+                  </div>
+                </Link>
+              ) : (
+                <>
+                  <div
+                    onClick={() => toggleMenu(item.label)}
+                    className={`flex items-center p-3 rounded-lg transition-all hover:bg-sidebar-light cursor-pointer
+                      ${isCollapsed ? 'justify-center' : 'justify-between'}
+                    `}
+                  >
+                    <div className="flex items-center">
+                      <span className={`material-icons ${isCollapsed ? 'mr-0' : 'mr-3'}`}>{item.icon}</span>
+                      {!isCollapsed && <span>{item.label}</span>}
+                    </div>
+                    {!isCollapsed && (
+                      <span className="material-icons text-sm">
+                        {openMenus[item.label] ? 'expand_less' : 'expand_more'}
+                      </span>
+                    )}
+                  </div>
+                  
+                  {(!isCollapsed || isMobile) && openMenus[item.label] && (
+                    <ul className={`${isCollapsed ? 'ml-0' : 'ml-6'} mt-1 space-y-1`}>
+                      {item.items.map((subItem) => (
+                        <li key={subItem.label}>
+                          <Link href={subItem.href} passHref>
+                            <div
+                              className={`flex items-center p-2 ${isCollapsed ? 'pl-2 justify-center' : 'pl-3'} rounded-lg transition-all hover:bg-sidebar-light
+                                ${router.pathname === subItem.href ? 'bg-sidebar' : ''}
+                              `}
+                            >
+                              <span className={`material-icons ${isCollapsed ? 'text-lg' : 'text-sm mr-3'}`}>{subItem.icon}</span>
+                              {!isCollapsed && <span className="text-sm">{subItem.label}</span>}
+                            </div>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
             </li>
           ))}
         </ul>
@@ -69,7 +129,7 @@ export default function Sidebar() {
       `}>
         <div className={`flex items-center ${isCollapsed ? 'flex-col' : ''}`}>
           <div className="w-10 h-10 rounded-full bg-sidebar-light flex items-center justify-center mr-3">
-            <span>👤</span>
+            <span className="material-icons">person</span>
           </div>
           {!isCollapsed && (
             <div>

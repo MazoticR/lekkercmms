@@ -25,7 +25,8 @@ export default function App({ Component, pageProps }: AppProps) {
         ${isMobile ? 'ml-0 pt-16' : ''}
         p-4 md:p-8
       `}>
-        <div className="max-w-full overflow-hidden">
+        {/* Added scrollable-content wrapper */}
+        <div className="scrollable-content">
           <Component {...pageProps} />
         </div>
       </main>
