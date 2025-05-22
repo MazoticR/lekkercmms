@@ -152,7 +152,7 @@ export const parseExcelFile = async (file: File): Promise<WorkerData[]> => {
   }
 };
 
-function formatTimeFromExcel(value: any): string {
+export function formatTimeFromExcel(value: any): string {
   if (value === null || value === undefined || value === '') return '0:00';
   
   // Handle Excel time numbers (0.5 = 12:00)
@@ -177,8 +177,11 @@ function formatTimeFromExcel(value: any): string {
       return `${hours}:${minutes.toString().padStart(2, '0')}`;
     }
     
-    // Just a number (8 = 8:00)
+    // Just hours (8 = 8:00)
     if (/^\d+$/.test(cleanValue)) return `${cleanValue}:00`;
+    
+    // Handle invalid formats
+    return '0:00';
   }
 
   return '0:00';
@@ -237,104 +240,117 @@ export const calculateEfficiency = (
 export const generateExcelFile = async (workers: WorkerData[]): Promise<Blob> => {
   try {
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Workers Data'); // Single worksheet for all workers
+    const worksheet = workbook.addWorksheet('Workers Data');
 
-    // Add headers only once at the top
+    // Define headers (without ID and Nombre columns)
     const headers = [
-      'ID', 'Nombre', 'Operación', 'Estilo', 'Orden', 'Meta', 'Precio por hora',
+      'Operación', 'Estilo', 'Orden', 'Meta', 'Precio por hora',
       'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom',
-      'Total', 'Precio por pieza', 'Minutos por pieza',
-      'Horas trabajadas', 'Horas inactivas', 'Eficiencia', 'Bono'
+      'Total', 'Precio por pieza', 'Minutos por pieza'
     ];
-    worksheet.addRow(headers);
 
-    // Add data for each worker
     workers.forEach(worker => {
-      // Add a blank row before each worker for better readability
-      worksheet.addRow([]);
+      // Add employee header section
+      worksheet.addRow([]); // Empty row
+      
+      // Add clean employee info header
+      const infoRow = worksheet.addRow([`ID: ${worker.id}`, `Nombre: ${worker.name}`]);
+      infoRow.font = { bold: true };
+      
+      worksheet.addRow([]); // Empty row
+      worksheet.addRow(headers); // Column headers (without ID/Name)
 
-      // Add operations data
-          for (const op of worker.operations) {
-            // Skip operations that have NaN values in critical fields
-            if (isNaN(op.meta) || isNaN(op.pricePerHour) || isNaN(op.total)) {
-              continue; // Skip this operation
-            }
-            
-            worksheet.addRow([
-              worker.id, 
-              worker.name,
-              op.name, 
-              op.style, 
-              op.order, 
-              op.meta, 
-              op.pricePerHour,
-              op.dailyProduction.mon, 
-              op.dailyProduction.tue, 
-              op.dailyProduction.wed,
-              op.dailyProduction.thu, 
-              op.dailyProduction.fri, 
-              op.dailyProduction.sat,
-              op.dailyProduction.sun, 
-              op.total, 
-              op.pricePerPiece, 
-              op.minutesPerPiece,
-              '', '', '', '' // Placeholders for hours, efficiency, bonus
-            ]);
-          }
+      // Add operations data (without ID/Name columns)
+      for (const op of worker.operations) {
+        if (isNaN(op.meta)) continue;
+        
+        worksheet.addRow([
+          op.name, 
+          op.style, 
+          op.order, 
+          op.meta, 
+          op.pricePerHour,
+          op.dailyProduction.mon, 
+          op.dailyProduction.tue, 
+          op.dailyProduction.wed,
+          op.dailyProduction.thu, 
+          op.dailyProduction.fri, 
+          op.dailyProduction.sat,
+          op.dailyProduction.sun, 
+          op.total, 
+          op.pricePerPiece, 
+          op.minutesPerPiece
+        ]);
+      }
 
-      // Add summary rows (hours worked, inactive hours, efficiency, bonus)
-      worksheet.addRow([
-        worker.id, 
-        worker.name,
-        'Horas trabajadas', '', '', '', '',
-        worker.hoursWorked.mon, worker.hoursWorked.tue, worker.hoursWorked.wed,
-        worker.hoursWorked.thu, worker.hoursWorked.fri, worker.hoursWorked.sat,
-        worker.hoursWorked.sun, '', '', '',
-        '', '', '' // Placeholders
+      // Add summary rows (simplified without ID/Name)
+      const addSummaryRow = (label: string, values: (string | number)[]) => {
+        const row = worksheet.addRow([
+          label, '', '', '', '',
+          ...values,
+          ...Array(7).fill('')
+        ]);
+        return row;
+      };
+
+      addSummaryRow('Horas trabajadas', [
+        worker.hoursWorked.mon, 
+        worker.hoursWorked.tue, 
+        worker.hoursWorked.wed,
+        worker.hoursWorked.thu, 
+        worker.hoursWorked.fri, 
+        worker.hoursWorked.sat,
+        worker.hoursWorked.sun
       ]);
 
-      worksheet.addRow([
-        worker.id, 
-        worker.name,
-        'Horas inactivas', '', '', '', '',
-        worker.inactiveHours.mon, worker.inactiveHours.tue, worker.inactiveHours.wed,
-        worker.inactiveHours.thu, worker.inactiveHours.fri, worker.inactiveHours.sat,
-        worker.inactiveHours.sun, '', '', '',
-        '', '', '' // Placeholders
+      addSummaryRow('Horas inactivas', [
+        worker.inactiveHours.mon, 
+        worker.inactiveHours.tue, 
+        worker.inactiveHours.wed,
+        worker.inactiveHours.thu, 
+        worker.inactiveHours.fri, 
+        worker.inactiveHours.sat,
+        worker.inactiveHours.sun
       ]);
 
-      worksheet.addRow([
-        worker.id, 
-        worker.name,
-        'Eficiencia', '', '', '', '',
+      addSummaryRow('Eficiencia', [
         worker.efficiency.mon.toFixed(2), 
         worker.efficiency.tue.toFixed(2),
         worker.efficiency.wed.toFixed(2), 
         worker.efficiency.thu.toFixed(2),
         worker.efficiency.fri.toFixed(2), 
         worker.efficiency.sat.toFixed(2),
-        worker.efficiency.sun.toFixed(2), '', '', '',
-        '', '', '' // Placeholders
+        worker.efficiency.sun.toFixed(2)
       ]);
 
-      worksheet.addRow([
-        worker.id, 
-        worker.name,
-        'Bono', '', '', '', '',
+      addSummaryRow('Bono', [
         worker.bonus?.mon || 0, 
         worker.bonus?.tue || 0,
         worker.bonus?.wed || 0,
         worker.bonus?.thu || 0,
         worker.bonus?.fri || 0,
         worker.bonus?.sat || 0,
-        worker.bonus?.sun || 0, '', '', '',
-        '', '', '' // Placeholders
+        worker.bonus?.sun || 0
       ]);
+
+      // Add empty row after each employee
+      worksheet.addRow([]);
     });
 
-    // Style the worksheet for better readability
+    // Style the worksheet
     worksheet.columns.forEach(column => {
       column.width = 15;
+    });
+
+    // Style headers
+    worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+      const firstCellValue = row.getCell(1).value;
+      if (typeof firstCellValue === 'string' && 
+          (firstCellValue.startsWith('ID:') || rowNumber === 1)) {
+        row.eachCell(cell => {
+          cell.font = { bold: true };
+        });
+      }
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
