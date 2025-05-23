@@ -13,8 +13,9 @@ export default function Sidebar() {
     setOpenMenus({ 'Tools': true });
     
     const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
-      if (window.innerWidth < 768) {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (mobile) {
         setIsCollapsed(true);
       }
     };
@@ -40,7 +41,6 @@ export default function Sidebar() {
       icon: 'build',
       items: [
         { href: '/tools/purchase-orders', icon: 'receipt', label: 'POs ApparelMagic' },
-        // Add more tool items here
       ]
     }
   ];
@@ -49,14 +49,17 @@ export default function Sidebar() {
     <div className={`fixed left-0 top-0 h-screen bg-gradient-to-b from-sidebar to-sidebar-light text-sidebar-text shadow-lg transition-all duration-300 z-50
       ${isCollapsed ? 'w-20' : 'w-64'}
       ${isMobile && !isCollapsed ? 'w-full' : ''}
+      ${isMobile && isCollapsed ? 'pointer-events-none' : 'pointer-events-auto'}
     `}>
+      {/* Header with collapse button */}
       <div className={`p-4 flex items-center justify-between border-b border-sidebar-lighter
         ${isCollapsed ? 'flex-col h-20' : ''}
+        ${isMobile && isCollapsed ? 'pointer-events-auto' : ''}
       `}>
         {!isCollapsed && <div className="text-2xl font-bold">LekkerCMMS</div>}
         <button 
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-2 rounded-full hover:bg-sidebar-light transition-colors"
+          className="p-2 rounded-full hover:bg-sidebar-light transition-colors pointer-events-auto"
         >
           <span className="material-icons">
             {isCollapsed ? 'chevron_right' : 'chevron_left'}
@@ -64,10 +67,11 @@ export default function Sidebar() {
         </button>
       </div>
       
-      <nav className="p-4 overflow-y-auto h-[calc(100vh-180px)]">
+      {/* Navigation Menu */}
+      <nav className={`p-4 overflow-y-auto h-[calc(100vh-180px)] ${isMobile && isCollapsed ? 'pointer-events-none' : 'pointer-events-auto'}`}>
         <ul className="space-y-2">
           {menuItems.map((item) => (
-            <li key={item.label}>
+            <li key={item.label} className="pointer-events-auto">
               {item.href ? (
                 <Link href={item.href} passHref>
                   <div
@@ -124,7 +128,8 @@ export default function Sidebar() {
         </ul>
       </nav>
       
-      <div className={`absolute bottom-0 w-full p-4 border-t border-sidebar-lighter
+      {/* Footer with user info */}
+      <div className={`absolute bottom-0 w-full p-4 border-t border-sidebar-lighter pointer-events-auto
         ${isCollapsed ? 'flex justify-center' : ''}
       `}>
         <div className={`flex items-center ${isCollapsed ? 'flex-col' : ''}`}>
