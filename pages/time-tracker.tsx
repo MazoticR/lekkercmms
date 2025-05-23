@@ -10,20 +10,20 @@ const TimeTrackerPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-const handleFileUpload = async (file: File) => {
-  setIsLoading(true);
-  setError(null);
-  
-  try {
-    const parsedWorkers = await parseExcelFile(file);
-    setWorkers([...parsedWorkers.map(w => ({ ...w }))]); // Added missing closing parenthesis
-  } catch (err) {
-    console.error('Error parsing file:', err);
-    setError('Failed to parse Excel file.');
-  } finally {
-    setIsLoading(false);
-  }
-};
+  const handleFileUpload = async (file: File) => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const parsedWorkers = await parseExcelFile(file);
+      setWorkers([...parsedWorkers.map(w => ({ ...w }))]);
+    } catch (err) {
+      console.error('Error parsing file:', err);
+      setError('Failed to parse Excel file.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleUpdateWorker = (updatedWorker: WorkerData) => {
     setWorkers(prev =>
@@ -52,16 +52,16 @@ const handleFileUpload = async (file: File) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 min-w-fit">
       <Head>
         <title>Worker Time Tracker</title>
         <meta name="description" content="Process worker time tracking Excel files" />
       </Head>
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8 min-w-fit">
         <h1 className="text-3xl font-bold text-gray-900 mb-6">Worker Time Tracker</h1>
         
-        <div className="bg-white rounded-lg shadow p-6 mb-8">
+        <div className="bg-white rounded-lg shadow p-6 mb-8 min-w-fit">
           <FileUpload onFileUpload={handleFileUpload} isLoading={isLoading} />
           
           {error && (
@@ -72,8 +72,8 @@ const handleFileUpload = async (file: File) => {
         </div>
 
         {workers.length > 0 && (
-          <div className="mb-8">
-            <div className="flex justify-between items-center mb-4">
+          <div className="mb-8 min-w-fit">
+            <div className="flex justify-between items-center mb-4 min-w-fit">
               <h2 className="text-xl font-semibold text-gray-900">Worker Data</h2>
               <button
                 onClick={handleDownload}
@@ -83,22 +83,24 @@ const handleFileUpload = async (file: File) => {
               </button>
             </div>
 
-            <div className="space-y-6">
-              {workers.map(worker => (
-                <WorkerTable
-                  key={`${worker.id}-${worker.name}`}
-                  worker={worker}
-                  onUpdate={handleUpdateWorker}
-                />
-              ))}
+            <div className="overflow-x-auto">
+              <div className="min-w-[800px] space-y-6">
+                {workers.map(worker => (
+                  <WorkerTable
+                    key={`${worker.id}-${worker.name}`}
+                    worker={worker}
+                    onUpdate={handleUpdateWorker}
+                  />
+                ))}
+              </div>
             </div>
           </div>
         )}
 
         {workers.length > 0 && (
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-white rounded-lg shadow p-6 min-w-fit">
             <h2 className="text-xl font-semibold text-gray-900 mb-4">Summary Statistics</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 min-w-fit">
               <div className="bg-blue-50 p-4 rounded-lg">
                 <h3 className="text-lg font-medium text-blue-800 mb-2">Total Workers</h3>
                 <p className="text-3xl font-bold text-blue-900">{workers.length}</p>

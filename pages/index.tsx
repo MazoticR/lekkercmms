@@ -18,7 +18,6 @@ export default function Home() {
           setMessage('Testing database connection...');
         }
 
-        // Set timeout only if we haven't connected before
         if (!hasConnectedOnce) {
           connectionTimeout = setTimeout(() => {
             if (isMounted && connectionStatus === 'connecting') {
@@ -28,7 +27,6 @@ export default function Home() {
           }, 5000);
         }
 
-        // Test both tables in parallel
         const [machinesResult, partsResult] = await Promise.all([
           supabase.from('machines').select('*', { count: 'exact' }),
           supabase.from('machine_parts').select('*', { count: 'exact' })
@@ -69,35 +67,35 @@ export default function Home() {
   const statusColors = {
     connecting: 'bg-yellow-500',
     connected: 'bg-green-500',
-    error: hasConnectedOnce ? 'bg-green-500' : 'bg-red-500' // Show green if we've connected before
+    error: hasConnectedOnce ? 'bg-green-500' : 'bg-red-500'
   };
 
   const statusIcons = {
     connecting: '🔄',
     connected: '✅',
-    error: hasConnectedOnce ? '⚠️' : '❌' // Show warning instead of error if we've connected before
+    error: hasConnectedOnce ? '⚠️' : '❌'
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-800 dark:text-white mb-2">
+    <div className="p-4 sm:p-6 lg:p-8 min-w-fit">
+      <div className="max-w-4xl mx-auto min-w-fit">
+        <div className="mb-8 min-w-fit">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-800 mb-2">
             Lekker Dashboard
           </h1>
-          <p className="text-base sm:text-lg text-gray-600 dark:text-gray-300">
+          <p className="text-base sm:text-lg text-gray-600">
             Compilation of stuff
           </p>
         </div>
 
         {/* Connection Status Card */}
-        <div className="card mb-6">
+        <div className="card mb-6 min-w-fit">
           <div className={`${statusColors[connectionStatus]} p-4 text-white flex items-center`}>
             <span className="mr-2 text-xl">{statusIcons[connectionStatus]}</span>
             <h2 className="text-lg sm:text-xl font-semibold">Database Connection Status</h2>
           </div>
-          <div className="p-4 sm:p-6">
-            <div className="flex items-center mb-3">
+          <div className="p-4 sm:p-6 min-w-fit">
+            <div className="flex items-center mb-3 min-w-fit">
               <div className={`w-3 h-3 sm:w-4 sm:h-4 rounded-full ${statusColors[connectionStatus]} mr-2 sm:mr-3`}></div>
               <span className="text-base sm:text-lg font-medium">
                 {connectionStatus === 'connecting' && 'Connecting to database...'}
@@ -105,17 +103,17 @@ export default function Home() {
                 {connectionStatus === 'error' && hasConnectedOnce ? 'Connection slow but working' : 'Connection failed'}
               </span>
             </div>
-            <p className="text-sm sm:text-base text-gray-700 dark:text-gray-300 mb-4">{message}</p>
+            <p className="text-sm sm:text-base text-gray-700 mb-4">{message}</p>
             
             {(connectionStatus === 'connected' || (connectionStatus === 'error' && hasConnectedOnce)) && stats && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4">
-                <div className="bg-gray-50 dark:bg-gray-700 p-3 sm:p-4 rounded-lg">
-                  <h3 className="text-sm sm:text-base font-medium text-gray-500 dark:text-gray-300">Total Machines</h3>
-                  <p className="text-2xl sm:text-3xl font-bold text-purple-600 dark:text-purple-400">{stats.machines}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-4 min-w-fit">
+                <div className="bg-gray-50 p-3 sm:p-4 rounded-lg min-w-fit">
+                  <h3 className="text-sm sm:text-base font-medium text-gray-500">Total Machines</h3>
+                  <p className="text-2xl sm:text-3xl font-bold text-purple-600">{stats.machines}</p>
                 </div>
-                <div className="bg-gray-50 dark:bg-gray-700 p-3 sm:p-4 rounded-lg">
-                  <h3 className="text-sm sm:text-base font-medium text-gray-500 dark:text-gray-300">Total Parts</h3>
-                  <p className="text-2xl sm:text-3xl font-bold text-purple-600 dark:text-purple-400">{stats.parts}</p>
+                <div className="bg-gray-50 p-3 sm:p-4 rounded-lg min-w-fit">
+                  <h3 className="text-sm sm:text-base font-medium text-gray-500">Total Parts</h3>
+                  <p className="text-2xl sm:text-3xl font-bold text-purple-600">{stats.parts}</p>
                 </div>
               </div>
             )}
@@ -123,37 +121,37 @@ export default function Home() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8">
-          <div className="card p-4 sm:p-6">
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-2">Manage Machines</h3>
-            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mb-4">View and manage all your machines</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8 min-w-fit">
+          <div className="card p-4 sm:p-6 min-w-[300px]">
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">Manage Machines</h3>
+            <p className="text-sm sm:text-base text-gray-600 mb-4">View and manage all your machines</p>
             <a href="/machines" className="inline-block bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded text-sm sm:text-base transition duration-200">
               Go to Machines
             </a>
           </div>
-          <div className="card p-4 sm:p-6">
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-2">Add New Machine</h3>
-            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mb-4">Register a new machine to your inventory</p>
+          <div className="card p-4 sm:p-6 min-w-[300px]">
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">Add New Machine</h3>
+            <p className="text-sm sm:text-base text-gray-600 mb-4">Register a new machine to your inventory</p>
             <a href="/machines/new" className="inline-block bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded text-sm sm:text-base transition duration-200">
               Add Machine
             </a>
           </div>
-          <div className="card p-4 sm:p-6">
-            <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-2">System Health</h3>
-            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 mb-4">Check system status and performance</p>
-            <button className="inline-block bg-gray-200 hover:bg-gray-300 dark:bg-gray-600 dark:hover:bg-gray-500 text-gray-800 dark:text-white py-2 px-4 rounded text-sm sm:text-base transition duration-200">
+          <div className="card p-4 sm:p-6 min-w-[300px]">
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">System Health</h3>
+            <p className="text-sm sm:text-base text-gray-600 mb-4">Check system status and performance</p>
+            <button className="inline-block bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded text-sm sm:text-base transition duration-200">
               View Status
             </button>
           </div>
         </div>
 
         {/* Recent Activity */}
-        <div className="card">
+        <div className="card min-w-fit">
           <div className="bg-gray-800 p-4 text-white">
             <h2 className="text-lg sm:text-xl font-semibold">Recent Activity</h2>
           </div>
-          <div className="p-4 sm:p-6">
-            <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400 italic">
+          <div className="p-4 sm:p-6 min-w-fit">
+            <p className="text-sm sm:text-base text-gray-500 italic">
               Activity log will appear here once you start using the system
             </p>
           </div>
