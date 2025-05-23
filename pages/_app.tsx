@@ -20,9 +20,9 @@ export default function App({ Component, pageProps }: AppProps) {
   return (
     <>
       <Head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=5.0" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0" />
       </Head>
-      <div className="flex min-h-screen w-full">
+      <div className="flex min-h-screen w-full bg-background">
         <Sidebar />
         
         <main className={`flex-1 transition-all duration-300
@@ -30,9 +30,9 @@ export default function App({ Component, pageProps }: AppProps) {
           ${isMobile ? 'ml-0 pt-16' : ''}
           p-4 md:p-8
           overflow-auto
-          touch-pan-y
+          min-w-0
         `}>
-          <div className="w-full">
+          <div className="w-full max-w-full min-w-0">
             <Component {...pageProps} />
           </div>
         </main>

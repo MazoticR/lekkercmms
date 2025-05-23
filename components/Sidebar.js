@@ -8,7 +8,6 @@ export default function Sidebar() {
   const [isMobile, setIsMobile] = useState(false);
   const [openMenus, setOpenMenus] = useState({});
 
-  // Initialize with Tools menu open by default
   useEffect(() => {
     setOpenMenus({ 'Tools': true });
     
@@ -47,19 +46,16 @@ export default function Sidebar() {
 
   return (
     <div className={`fixed left-0 top-0 h-screen bg-gradient-to-b from-sidebar to-sidebar-light text-sidebar-text shadow-lg transition-all duration-300 z-50
-      ${isCollapsed ? 'w-20' : 'w-64'}
-      ${isMobile && !isCollapsed ? 'w-full' : ''}
-      ${isMobile && isCollapsed ? 'pointer-events-none' : 'pointer-events-auto'}
+      ${isCollapsed ? 'w-16' : 'w-64'}
+      ${isMobile && !isCollapsed ? 'w-64' : ''}
     `}>
-      {/* Header with collapse button */}
       <div className={`p-4 flex items-center justify-between border-b border-sidebar-lighter
         ${isCollapsed ? 'flex-col h-20' : ''}
-        ${isMobile && isCollapsed ? 'pointer-events-auto' : ''}
       `}>
         {!isCollapsed && <div className="text-2xl font-bold">LekkerCMMS</div>}
         <button 
           onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-2 rounded-full hover:bg-sidebar-light transition-colors pointer-events-auto"
+          className="p-2 rounded-full hover:bg-sidebar-light transition-colors"
         >
           <span className="material-icons">
             {isCollapsed ? 'chevron_right' : 'chevron_left'}
@@ -67,11 +63,10 @@ export default function Sidebar() {
         </button>
       </div>
       
-      {/* Navigation Menu */}
-      <nav className={`p-4 overflow-y-auto h-[calc(100vh-180px)] ${isMobile && isCollapsed ? 'pointer-events-none' : 'pointer-events-auto'}`}>
+      <nav className="p-4 overflow-y-auto h-[calc(100vh-180px)]">
         <ul className="space-y-2">
           {menuItems.map((item) => (
-            <li key={item.label} className="pointer-events-auto">
+            <li key={item.label}>
               {item.href ? (
                 <Link href={item.href} passHref>
                   <div
@@ -128,8 +123,7 @@ export default function Sidebar() {
         </ul>
       </nav>
       
-      {/* Footer with user info */}
-      <div className={`absolute bottom-0 w-full p-4 border-t border-sidebar-lighter pointer-events-auto
+      <div className={`absolute bottom-0 w-full p-4 border-t border-sidebar-lighter
         ${isCollapsed ? 'flex justify-center' : ''}
       `}>
         <div className={`flex items-center ${isCollapsed ? 'flex-col' : ''}`}>
