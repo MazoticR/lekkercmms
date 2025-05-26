@@ -8,13 +8,13 @@ export default function Sidebar() {
   const [isMobile, setIsMobile] = useState(false);
   const [openMenus, setOpenMenus] = useState({});
 
-  // Initialize with Tools menu open by default
   useEffect(() => {
     setOpenMenus({ 'Tools': true });
     
     const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
-      if (window.innerWidth < 768) {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (mobile) {
         setIsCollapsed(true);
       }
     };
@@ -40,15 +40,14 @@ export default function Sidebar() {
       icon: 'build',
       items: [
         { href: '/tools/purchase-orders', icon: 'receipt', label: 'POs ApparelMagic' },
-        // Add more tool items here
       ]
     }
   ];
 
   return (
     <div className={`fixed left-0 top-0 h-screen bg-gradient-to-b from-sidebar to-sidebar-light text-sidebar-text shadow-lg transition-all duration-300 z-50
-      ${isCollapsed ? 'w-20' : 'w-64'}
-      ${isMobile && !isCollapsed ? 'w-full' : ''}
+      ${isCollapsed ? 'w-16' : 'w-64'}
+      ${isMobile && !isCollapsed ? 'w-64' : ''}
     `}>
       <div className={`p-4 flex items-center justify-between border-b border-sidebar-lighter
         ${isCollapsed ? 'flex-col h-20' : ''}
