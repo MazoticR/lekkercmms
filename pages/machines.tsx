@@ -1,12 +1,15 @@
-import { useState, useEffect, FormEvent } from 'react';
+import { useState, useEffect, FormEvent, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import supabase from '../lib/supabaseClient';
 import { MACHINE_STATUSES, MachineStatus } from '../lib/constants';
 
 interface Machine {
   id: number;
-  name: string;
-  location: string;
+  machine_number: string;
+  description: string;
+  serial_number: string;
+  brand: string;
+  model: string;
   status: MachineStatus;
   last_updated?: string;
   total_parts_cost?: number;
@@ -14,11 +17,30 @@ interface Machine {
 
 const MachinesPage = () => {
   const [machines, setMachines] = useState<Machine[]>([]);
-  const [name, setName] = useState('');
-  const [location, setLocation] = useState('');
+  const [machineNumber, setMachineNumber] = useState('');
+  const [description, setDescription] = useState('');
+  const [serialNumber, setSerialNumber] = useState('');
+  const [brand, setBrand] = useState('');
+  const [model, setModel] = useState('');
   const [status, setStatus] = useState<MachineStatus>('operational');
   const [editingMachine, setEditingMachine] = useState<Machine | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const router = useRouter();
+
+  const filteredMachines = useMemo(() => {
+    if (!searchQuery) return machines;
+    
+    const query = searchQuery.toLowerCase();
+    return machines.filter(machine => 
+      machine.machine_number.toLowerCase().includes(query) ||
+      machine.description.toLowerCase().includes(query) ||
+      machine.serial_number.toLowerCase().includes(query) ||
+      machine.brand.toLowerCase().includes(query) ||
+      machine.model.toLowerCase().includes(query) ||
+      machine.status.toLowerCase().includes(query) ||
+      machine.total_parts_cost?.toString().includes(query)
+    );
+  }, [machines, searchQuery]);
 
   useEffect(() => {
     fetchMachines();
@@ -35,7 +57,6 @@ const MachinesPage = () => {
       return;
     }
 
-    // Fetch total parts cost for each machine
     const machinesWithCosts = await Promise.all(
       machinesData.map(async (machine) => {
         const { data: partsData, error: partsError } = await supabase
@@ -58,11 +79,14 @@ const MachinesPage = () => {
 
   async function addMachine(e: FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !location.trim()) return;
+    if (!machineNumber.trim()) return;
     
     const newMachine = {
-      name: name.trim(),
-      location: location.trim(),
+      machine_number: machineNumber.trim(),
+      description: description.trim(),
+      serial_number: serialNumber.trim(),
+      brand: brand.trim(),
+      model: model.trim(),
       status,
       last_updated: new Date().toISOString()
     };
@@ -72,40 +96,44 @@ const MachinesPage = () => {
     if (error) {
       console.error('Error adding machine:', error);
     } else {
-      setName('');
-      setLocation('');
+      setMachineNumber('');
+      setDescription('');
+      setSerialNumber('');
+      setBrand('');
+      setModel('');
       setStatus('operational');
       fetchMachines();
     }
   }
 
-async function updateMachine(e: FormEvent) {
-  e.preventDefault();
-  if (!editingMachine) return;
-  
-  const { error } = await supabase
-    .from('machines')
-    .update({
-      name: name.trim(),
-      location: location.trim(),
-      status,
-      last_updated: new Date().toISOString() // Update timestamp
-    })
-    .eq('id', editingMachine.id);
+  async function updateMachine(e: FormEvent) {
+    e.preventDefault();
+    if (!editingMachine) return;
+    
+    const { error } = await supabase
+      .from('machines')
+      .update({
+        machine_number: machineNumber.trim(),
+        description: description.trim(),
+        serial_number: serialNumber.trim(),
+        brand: brand.trim(),
+        model: model.trim(),
+        status,
+        last_updated: new Date().toISOString()
+      })
+      .eq('id', editingMachine.id);
 
-  if (error) {
-    console.error('Error updating machine:', error);
-  } else {
-    // Reset form and refresh
-    cancelEdit();
-    fetchMachines();
+    if (error) {
+      console.error('Error updating machine:', error);
+    } else {
+      cancelEdit();
+      fetchMachines();
+    }
   }
-}
 
   async function deleteMachine(id: number) {
     if (!confirm('Are you sure you want to delete this machine? This will also delete all its parts.')) return;
     
-    // First delete all parts associated with this machine
     const { error: partsError } = await supabase
       .from('machine_parts')
       .delete()
@@ -116,7 +144,6 @@ async function updateMachine(e: FormEvent) {
       return;
     }
 
-    // Then delete the machine
     const { error: machineError } = await supabase
       .from('machines')
       .delete()
@@ -131,23 +158,45 @@ async function updateMachine(e: FormEvent) {
 
   function startEdit(machine: Machine) {
     setEditingMachine(machine);
-    setName(machine.name);
-    setLocation(machine.location);
+    setMachineNumber(machine.machine_number);
+    setDescription(machine.description);
+    setSerialNumber(machine.serial_number);
+    setBrand(machine.brand);
+    setModel(machine.model);
     setStatus(machine.status);
   }
 
   function cancelEdit() {
     setEditingMachine(null);
-    setName('');
-    setLocation('');
+    setMachineNumber('');
+    setDescription('');
+    setSerialNumber('');
+    setBrand('');
+    setModel('');
     setStatus('operational');
   }
 
   return (
     <div className="p-8">
       <h1 className="text-3xl font-bold mb-6 text-gray-800">Machines Management</h1>
+
+      <div className="mb-6">
+        <div className="relative max-w-md">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <svg className="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <input
+            type="text"
+            placeholder="Search machines..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 sm:text-sm"
+          />
+        </div>
+      </div>
       
-      {/* Form to add/edit a machine */}
       <form onSubmit={editingMachine ? updateMachine : addMachine} className="bg-white p-6 rounded-lg shadow-md mb-8">
         <h2 className="text-xl font-semibold mb-4 text-gray-700">
           {editingMachine ? 'Edit Machine' : 'Add New Machine'}
@@ -155,18 +204,38 @@ async function updateMachine(e: FormEvent) {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <input
             type="text"
-            placeholder="Machine Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            placeholder="Machine Number"
+            value={machineNumber}
+            onChange={(e) => setMachineNumber(e.target.value)}
             required
             className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
           <input
             type="text"
-            placeholder="Location"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            required
+            placeholder="Description"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+          <input
+            type="text"
+            placeholder="Serial Number"
+            value={serialNumber}
+            onChange={(e) => setSerialNumber(e.target.value)}
+            className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+          <input
+            type="text"
+            placeholder="Brand"
+            value={brand}
+            onChange={(e) => setBrand(e.target.value)}
+            className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+          <input
+            type="text"
+            placeholder="Model"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
             className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
           <select
@@ -200,39 +269,47 @@ async function updateMachine(e: FormEvent) {
         </div>
       </form>
 
-      {/* Table listing all machines */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
-        <table className=" table-container min-w-full divide-y divide-gray-200">
+        <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Machine Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Machine #</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Serial #</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Parts Cost</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Parts Cost</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {machines.length > 0 ? (
-              machines.map((machine) => (
+            {filteredMachines.length > 0 ? (
+              filteredMachines.map((machine) => (
                 <tr key={machine.id} className="hover:bg-gray-50 transition duration-150">
-                  <td 
-                    className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 cursor-pointer"
-                    onClick={() => router.push(`/machines/${machine.id}`)}
-                  >
-                    {machine.name}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 cursor-pointer"
+                    onClick={() => router.push(`/machines/${machine.id}`)}>
+                    {machine.machine_number}
                   </td>
-                  <td 
-                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer"
-                    onClick={() => router.push(`/machines/${machine.id}`)}
-                  >
-                    {machine.location}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer"
+                    onClick={() => router.push(`/machines/${machine.id}`)}>
+                    {machine.description}
                   </td>
-                  <td 
-                    className="px-6 py-4 whitespace-nowrap cursor-pointer"
-                    onClick={() => router.push(`/machines/${machine.id}`)}
-                  >
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer"
+                    onClick={() => router.push(`/machines/${machine.id}`)}>
+                    {machine.serial_number}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer"
+                    onClick={() => router.push(`/machines/${machine.id}`)}>
+                    {machine.brand}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer"
+                    onClick={() => router.push(`/machines/${machine.id}`)}>
+                    {machine.model}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap cursor-pointer"
+                    onClick={() => router.push(`/machines/${machine.id}`)}>
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                       machine.status === 'operational' ? 'bg-green-100 text-green-800' :
                       machine.status === 'maintenance' ? 'bg-yellow-100 text-yellow-800' :
@@ -242,16 +319,12 @@ async function updateMachine(e: FormEvent) {
                       {MACHINE_STATUSES.find(s => s.value === machine.status)?.label}
                     </span>
                   </td>
-                  <td 
-                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer"
-                    onClick={() => router.push(`/machines/${machine.id}`)}
-                  >
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer"
+                    onClick={() => router.push(`/machines/${machine.id}`)}>
                     ${machine.total_parts_cost?.toFixed(2) || '0.00'}
                   </td>
-                  <td 
-                    className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer"
-                    onClick={() => router.push(`/machines/${machine.id}`)}
-                  >
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer"
+                    onClick={() => router.push(`/machines/${machine.id}`)}>
                     {machine.last_updated ? new Date(machine.last_updated).toLocaleString() : 'N/A'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -280,7 +353,9 @@ async function updateMachine(e: FormEvent) {
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="px-6 py-4 text-center text-sm text-gray-500">No machines found</td>
+                <td colSpan={9} className="px-6 py-4 text-center text-sm text-gray-500">
+                  {searchQuery ? 'No matching machines found' : 'No machines found'}
+                </td>
               </tr>
             )}
           </tbody>

@@ -5,8 +5,9 @@ import { MACHINE_STATUSES, MachineStatus } from '../../lib/constants';
 
 interface Machine {
   id: number;
-  name: string;
-  location: string;
+  machine_number: string;
+  description: string;
+  serial_number: string;
   status: MachineStatus;
   last_updated?: string;
 }
@@ -44,6 +45,7 @@ const MachineDetailPage = () => {
   const [cost, setCost] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<InventoryPart[]>([]);
+  const [editingPart, setEditingPart] = useState<MachinePart | null>(null);
 
   useEffect(() => {
     if (machineId) {
@@ -135,14 +137,12 @@ const MachineDetailPage = () => {
     }
   }
 
-  async function addPart(e: FormEvent) {
+  async function addOrUpdatePart(e: FormEvent) {
     e.preventDefault();
     if (!selectedInventoryPart) return;
     
     const selectedPart = inventoryParts.find(part => part.id === selectedInventoryPart);
     if (!selectedPart) return;
-
-    const existingPart = parts.find(part => part.inventory_part_id === selectedInventoryPart);
 
     const partData = {
       last_replaced_date: lastReplacedDate ? lastReplacedDate : null,
@@ -151,14 +151,12 @@ const MachineDetailPage = () => {
       last_updated: new Date().toISOString()
     };
 
-    if (existingPart) {
+    if (editingPart) {
+      // Update existing part without incrementing times_replaced
       const { error } = await supabase
         .from('machine_parts')
-        .update({
-          ...partData,
-          times_replaced: (existingPart.times_replaced || 0) + 1
-        })
-        .eq('id', existingPart.id);
+        .update(partData)
+        .eq('id', editingPart.id);
       
       if (error) {
         console.error('Error updating part:', error);
@@ -168,40 +166,78 @@ const MachineDetailPage = () => {
         fetchParts();
       }
     } else {
-      const newPart = {
-        machine_id: machineId,
-        part_name: selectedPart.part_number,
-        code: selectedPart.description || '',
-        inventory_part_id: selectedInventoryPart,
-        times_replaced: 1,
-        ...partData
-      };
+      // Handle new part or replacement
+      const existingPart = parts.find(part => part.inventory_part_id === selectedInventoryPart);
 
-      const { error } = await supabase
-        .from('machine_parts')
-        .insert(newPart);
-      
-      if (error) {
-        console.error('Error adding part:', error);
-      } else {
-        resetForm();
-        await updateMachineTimestamp();
-        fetchParts();
+      if (existingPart) {
+        // Increment times_replaced only if this is a replacement
+        const { error } = await supabase
+          .from('machine_parts')
+          .update({
+            ...partData,
+            times_replaced: (existingPart.times_replaced || 0) + 1
+          })
+          .eq('id', existingPart.id);
         
-        await supabase.rpc('decrement_inventory', {
-          part_id: selectedInventoryPart
-        });
+        if (error) {
+          console.error('Error updating part:', error);
+        } else {
+          resetForm();
+          await updateMachineTimestamp();
+          fetchParts();
+        }
+      } else {
+        // Add new part
+        const newPart = {
+          machine_id: machineId,
+          part_name: selectedPart.part_number,
+          code: selectedPart.description || '',
+          inventory_part_id: selectedInventoryPart,
+          times_replaced: 1,
+          ...partData
+        };
+
+        const { error } = await supabase
+          .from('machine_parts')
+          .insert(newPart);
+        
+        if (error) {
+          console.error('Error adding part:', error);
+        } else {
+          resetForm();
+          await updateMachineTimestamp();
+          fetchParts();
+          
+          await supabase.rpc('decrement_inventory', {
+            part_id: selectedInventoryPart
+          });
+        }
       }
     }
   }
 
-  function resetForm() {
-    setSelectedInventoryPart(null);
-    setLastReplacedDate('');
-    setNotes('');
-    setCost(null);
-    setSearchTerm('');
+  function startEditPart(part: MachinePart) {
+    setEditingPart(part);
+    setSelectedInventoryPart(part.inventory_part_id);
+    setSearchTerm(`${part.part_name} - ${part.code || ''}`);
+    setLastReplacedDate(part.last_replaced_date || '');
+    setNotes(part.notes || '');
+    setCost(part.cost);
   }
+
+  function cancelEditPart() {
+    setEditingPart(null);
+    resetForm();
+  }
+
+function resetForm() {
+  setEditingPart(null);
+  setSelectedInventoryPart(null);
+  setLastReplacedDate('');
+  setNotes('');
+  setCost(null);
+  setSearchTerm('');
+}
 
   return (
     <div className="p-8 w-full min-w-fit overflow-x-auto">
@@ -220,11 +256,15 @@ const MachineDetailPage = () => {
           <div className="bg-white p-6 rounded-lg shadow-md mb-8">
             <div className="flex justify-between items-start">
               <div>
-                <h1 className="text-2xl font-bold text-gray-800 mb-2">{machine.name}</h1>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <h1 className="text-2xl font-bold text-gray-800 mb-2">Machine #{machine.machine_number}</h1>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <p className="text-sm text-gray-500">Location</p>
-                    <p className="text-gray-700">{machine.location}</p>
+                    <p className="text-sm text-gray-500">Description</p>
+                    <p className="text-gray-700">{machine.description}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Serial Number</p>
+                    <p className="text-gray-700">{machine.serial_number}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Last Updated</p>
@@ -246,7 +286,7 @@ const MachineDetailPage = () => {
 
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Machine Parts</h2>
 
-          <form onSubmit={addPart} className="bg-white p-6 rounded-lg shadow-md mb-8">
+          <form onSubmit={addOrUpdatePart} className="bg-white p-6 rounded-lg shadow-md mb-8">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
               <div className="relative">
                 <input
@@ -313,8 +353,18 @@ const MachineDetailPage = () => {
               className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded transition duration-200"
               disabled={!selectedInventoryPart}
             >
-              {parts.some(p => p.inventory_part_id === selectedInventoryPart) ? 'Update Part' : 'Add Part'}
+              {editingPart ? 'Update Part' : 
+       parts.some(p => p.inventory_part_id === selectedInventoryPart) ? 'Replace Part' : 'Add Part'}
             </button>
+                {editingPart && (
+                    <button
+                      type="button"
+                      onClick={cancelEditPart}
+                      className="ml-2 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded transition duration-200"
+                    >
+                      Cancel
+                    </button>
+               )}
           </form>
 
           <div className="bg-white rounded-lg shadow-md overflow-x-auto w-full">
@@ -360,12 +410,26 @@ const MachineDetailPage = () => {
                           {part.notes || 'N/A'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          <div className="flex space-x-2">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    startEditPart(part);
+                                  }}
+                                  className="text-blue-600 hover:text-blue-800"
+                                >
+                                  Edit
+                                </button>
                           <button
-                            onClick={() => deletePart(part.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deletePart(part.id);
+                            }}
                             className="text-red-600 hover:text-red-800"
                           >
                             Delete
                           </button>
+                          </div>
                         </td>
                       </tr>
                     ))
