@@ -2,6 +2,7 @@ import { useState, useEffect, FormEvent, useMemo } from 'react';
 import { useRouter } from 'next/router';
 import supabase from '../lib/supabaseClient';
 import { MACHINE_STATUSES, MachineStatus } from '../lib/constants';
+import Head from 'next/head';
 
 interface Machine {
   id: number;
@@ -177,7 +178,14 @@ const MachinesPage = () => {
   }
 
   return (
+
+    
     <div className="p-8">
+
+      <Head>
+        <title>Machines</title>
+      </Head>
+
       <h1 className="text-3xl font-bold mb-6 text-gray-800">Machines Management</h1>
 
       <div className="mb-6">

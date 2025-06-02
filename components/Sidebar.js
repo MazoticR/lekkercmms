@@ -52,7 +52,7 @@ export default function Sidebar() {
       <div className={`p-4 flex items-center justify-between border-b border-sidebar-lighter
         ${isCollapsed ? 'flex-col h-20' : ''}
       `}>
-        {!isCollapsed && <div className="text-2xl font-bold">LekkerCMMS</div>}
+        {!isCollapsed && <div className="text-2xl font-bold">Lekker Sewing</div>}
         <button 
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="p-2 rounded-full hover:bg-sidebar-light transition-colors"
