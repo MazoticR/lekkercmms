@@ -1,5 +1,21 @@
 // types/db_types.ts
 export type Database = {
+    app_roles: {
+    Row: {
+      id: number;
+      name: string;
+      permissions: string[]; // Array of permission strings
+      created_at: string;
+    };
+    Insert: {
+      name: string;
+      permissions?: string[];
+    };
+    Update: {
+      name?: string;
+      permissions?: string[];
+    };
+  };
   machines: {
     Row: {
       id: number;

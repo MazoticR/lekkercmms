@@ -1,5 +1,8 @@
 // lib/auth.ts
 import  supabase  from './supabaseClient';
+import bcrypt from 'bcryptjs';
+
+const SALT_ROUNDS = 10;
 
 type UserRole = 'admin' | 'manager' | 'user';
 
@@ -10,35 +13,92 @@ interface AppUser {
   role: UserRole;
 }
 
-export async function login(username: string, password: string): Promise<AppUser | null> {
-  // In a real app, you'd use Supabase Auth properly
-  // This is a simplified version for demonstration
-  const { data, error } = await supabase
-    .from('app_users')
-    .select('id, username, full_name, role')
-    .eq('username', username)
-    .eq('password_hash', password) // In reality, use proper hashing!
-    .single();
 
-  if (error || !data) return null;
-  
-  // Store in localStorage
-  localStorage.setItem('currentUser', JSON.stringify(data));
-  return data;
+
+// Vercel-safe session storage
+function getStorage() {
+  if (typeof window !== 'undefined') {
+    return window.localStorage;
+  }
+  return {
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {}
+  };
 }
 
-export function logout(): void {
-  localStorage.removeItem('currentUser');
-  window.location.href = '/login';
+export function storeUser(user: AppUser): void {
+  getStorage().setItem('currentUser', JSON.stringify(user));
+}
+
+export function clearUser(): void {
+  getStorage().removeItem('currentUser');
 }
 
 export function getCurrentUser(): AppUser | null {
-  const user = localStorage.getItem('currentUser');
+  const user = getStorage().getItem('currentUser');
   return user ? JSON.parse(user) : null;
 }
 
-export function hasPermission(user: AppUser | null, requiredRole: UserRole): boolean {
+export async function hashPassword(password: string): Promise<string> {
+  return await bcrypt.hash(password, SALT_ROUNDS);
+}
+
+// lib/auth.ts
+export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  try {
+    // First try modern verification
+    const modernMatch = await bcrypt.compare(password, hash);
+    if (modernMatch) return true;
+    
+    // If modern fails but hash starts with old prefix, try legacy
+    if (hash.startsWith('$2a$')) {
+      const legacyHash = hash.replace('$2a$', '$2b$');
+      return await bcrypt.compare(password, legacyHash);
+    }
+    
+    return false;
+  } catch (err) {
+    console.error('Password verification error:', err);
+    return false;
+  }
+}
+
+export async function login(username: string, password: string): Promise<AppUser | null> {
+  const { data, error } = await supabase
+    .from('app_users')
+    .select('id, username, full_name, role, password_hash')
+    .eq('username', username)
+    .single();
+
+  if (error || !data?.password_hash) return null;
+
+  const isValid = await verifyPassword(password, data.password_hash);
+  if (!isValid) return null;
+
+  const user = {
+    id: data.id,
+    username: data.username,
+    full_name: data.full_name,
+    role: data.role
+  };
+
+  storeUser(user);
+  return user;
+}
+
+export function logout(): void {
+  clearUser();
+  window.location.href = '/login';
+}
+
+// lib/auth.ts
+export function hasPermission(user: AppUser | null, requiredRoles: string | string[]): boolean {
   if (!user) return false;
-  const roleHierarchy = { user: 0, manager: 1, admin: 2 };
-  return roleHierarchy[user.role] >= roleHierarchy[requiredRole];
+  
+  // Convert single role to array
+  const roles = Array.isArray(requiredRoles) ? requiredRoles : [requiredRoles];
+  
+  // Check if user has any of the required roles
+  return roles.includes(user.role);
 }

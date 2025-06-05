@@ -47,26 +47,26 @@ export default function Sidebar() {
      { 
       label: 'Maintenance', 
       icon: 'engineering',
-      show: hasPermission(currentUser, 'user'), // Requires manager or higher
+      show: hasPermission(currentUser, ['maintenance', 'manager']), // Requires manager or higher
       items: [
         { 
           href: '/machines', 
           icon: 'precision_manufacturing', 
           label: 'Maquinas',
-          show: hasPermission(currentUser, 'user')
+          show: hasPermission(currentUser, ['maintenance','manager'])
         },
         // Add more tools here as needed
                 { 
           href: '/inventory', 
           icon: 'inventory', 
           label: 'Inventario',
-          show: hasPermission(currentUser, 'user')
+          show: hasPermission(currentUser, ['maintenace', 'manager'])
         },
                 { 
           href: '/tools/machine-orders', 
           icon: 'shopping_basket', 
           label: 'Ordenes para maquinas',
-          show: hasPermission(currentUser, 'user')
+          show: hasPermission(currentUser, ['maintenance', 'manager'])
         },
       ]
     },
@@ -74,18 +74,18 @@ export default function Sidebar() {
       href: '/time-tracker', 
       icon: 'timer', 
       label: 'Efficiencies',
-      show: hasPermission(currentUser, 'user' || 'admin') // Requires at least user role
+      show: true // Requires at least user role
     },
     { 
       label: 'Tools', 
       icon: 'build',
-      show: hasPermission(currentUser, 'manager'), // Requires manager or higher
+      show: hasPermission(currentUser, ['maintenance', 'manager']), // Requires manager or higher
       items: [
         { 
           href: '/tools/purchase-orders', 
           icon: 'receipt', 
           label: 'POs ApparelMagic',
-          show: hasPermission(currentUser, 'manager')
+          show: hasPermission(currentUser, ['maintenance', 'manager'])
         },
         // Add more tools here as needed
       ]
@@ -101,9 +101,23 @@ export default function Sidebar() {
           label: 'Usuarios',
           show: hasPermission(currentUser, 'admin')
         },
+        { 
+          href: '/admin/roles', 
+          icon: 'group', 
+          label: 'Roles',
+          show: hasPermission(currentUser, 'admin')
+        },
+        
         // Add more tools here as needed
       ]
-    }
+    },
+
+  {
+  href: '/change-password',
+  icon: 'lock',
+  label: 'Change Password',
+  show: Boolean(currentUser) // Only show when logged in
+  }
   ].filter(item => item.show); // Filter out items that shouldn't be shown
 
   return (

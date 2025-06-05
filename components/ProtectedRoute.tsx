@@ -22,7 +22,7 @@ export default function ProtectedRoute({
   }, [currentUser, router]);
 
   if (!currentUser || !hasPermission(currentUser, requiredRole)) {
-    return <div>Loading or unauthorized...</div>;
+    return <div className="p-8">Loading or unauthorized...</div>;
   }
 
   return <>{children}</>;
