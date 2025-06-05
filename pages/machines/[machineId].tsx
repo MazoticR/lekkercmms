@@ -2,6 +2,7 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/router';
 import supabase from '../../lib/supabaseClient';
 import { MACHINE_STATUSES, MachineStatus } from '../../lib/constants';
+import Head from 'next/head';
 
 interface Machine {
   id: number;
@@ -241,6 +242,10 @@ function resetForm() {
 
   return (
     <div className="p-8 w-full min-w-fit overflow-x-auto">
+
+      <Head>
+        <title>{machine ? `Machine ${machine.machine_number}` : 'Machine Details'}</title>
+      </Head>
       <button 
         onClick={() => router.push('/machines')} 
         className="flex items-center text-purple-600 hover:text-purple-800 mb-6 transition duration-200"

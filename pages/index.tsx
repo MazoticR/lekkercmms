@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import supabase from '../lib/supabaseClient';
+import Head from 'next/head';
 
 export default function Home() {
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
@@ -80,6 +81,10 @@ export default function Home() {
     <div className="p-4 sm:p-6 lg:p-8 min-w-fit">
       <div className="max-w-4xl mx-auto min-w-fit">
         <div className="mb-8 min-w-fit">
+
+      <Head>
+        <title>Inicio</title>
+      </Head>
           <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-800 mb-2">
             Lekker Dashboard
           </h1>

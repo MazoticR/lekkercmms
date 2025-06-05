@@ -6,6 +6,7 @@ import {
   Vendor,
   PurchaseOrdersResponse 
 } from '../../types/purchase-orders';
+import Head from 'next/head';
 
 export default function PurchaseOrdersTool() {
   const [year, setYear] = useState('2025');
@@ -192,6 +193,10 @@ const handleExport = async () => {
 
   return (
     <div className="max-w-[1200px] mx-auto p-5">
+
+      <Head>
+        <title>POs por Mes</title>
+      </Head>
       <h1 className="text-2xl font-bold mb-5">POs por mes</h1>
       
       <div className="flex flex-wrap gap-2.5 items-center my-5">

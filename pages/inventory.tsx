@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import supabase from '../lib/supabaseClient';
 import { Database } from '../types/db_types';
+import Head from 'next/head';
 
 type InventoryPart = Database['inventory_parts']['Row'];
 type AffectedMachine = {
@@ -196,6 +197,11 @@ async function prepareDelete(id: number) {
 
   return (
     <div className="p-8 relative">
+
+      <Head>
+        <title>Inventory</title>
+      </Head>
+
       {/* Notification System */}
       {notification && (
         <div
