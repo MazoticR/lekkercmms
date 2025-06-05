@@ -1,14 +1,19 @@
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import { useState, useEffect } from 'react';
+import { getCurrentUser, hasPermission, logout } from '../lib/auth';
 
 export default function Sidebar() {
   const router = useRouter();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [openMenus, setOpenMenus] = useState({});
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
+    // Check for logged in user
+    const user = getCurrentUser();
+    setCurrentUser(user);
     setOpenMenus({ 'Tools': true });
     
     const handleResize = () => {
@@ -31,18 +36,75 @@ export default function Sidebar() {
     }));
   };
 
+  const handleLogout = () => {
+    logout();
+    setCurrentUser(null);
+    router.push('/login');
+  };
+
   const menuItems = [
-    { href: '/', icon: 'home', label: 'Home' },
-    { href: '/machines', icon: 'bar_chart', label: 'Machines' },
-    { href: '/time-tracker', icon: 'timer', label: 'Efficiencies' },
+    { href: '/', icon: 'home', label: 'Home', show: true },
+     { 
+      label: 'Maintenance', 
+      icon: 'engineering',
+      show: hasPermission(currentUser, 'user'), // Requires manager or higher
+      items: [
+        { 
+          href: '/machines', 
+          icon: 'precision_manufacturing', 
+          label: 'Maquinas',
+          show: hasPermission(currentUser, 'user')
+        },
+        // Add more tools here as needed
+                { 
+          href: '/inventory', 
+          icon: 'inventory', 
+          label: 'Inventario',
+          show: hasPermission(currentUser, 'user')
+        },
+                { 
+          href: '/tools/machine-orders', 
+          icon: 'shopping_basket', 
+          label: 'Ordenes para maquinas',
+          show: hasPermission(currentUser, 'user')
+        },
+      ]
+    },
+    { 
+      href: '/time-tracker', 
+      icon: 'timer', 
+      label: 'Efficiencies',
+      show: hasPermission(currentUser, 'user' || 'admin') // Requires at least user role
+    },
     { 
       label: 'Tools', 
       icon: 'build',
+      show: hasPermission(currentUser, 'manager'), // Requires manager or higher
       items: [
-        { href: '/tools/purchase-orders', icon: 'receipt', label: 'POs ApparelMagic' },
+        { 
+          href: '/tools/purchase-orders', 
+          icon: 'receipt', 
+          label: 'POs ApparelMagic',
+          show: hasPermission(currentUser, 'manager')
+        },
+        // Add more tools here as needed
+      ]
+    },  
+     { 
+      label: 'Admin', 
+      icon: 'admin_panel_settings',
+      show: hasPermission(currentUser, 'admin'), // Requires manager or higher
+      items: [
+        { 
+          href: '/admin/users', 
+          icon: 'manage_accounts', 
+          label: 'Usuarios',
+          show: hasPermission(currentUser, 'admin')
+        },
+        // Add more tools here as needed
       ]
     }
-  ];
+  ].filter(item => item.show); // Filter out items that shouldn't be shown
 
   return (
     <div className={`fixed left-0 top-0 h-screen bg-gradient-to-b from-sidebar to-sidebar-light text-sidebar-text shadow-lg transition-all duration-300 z-50
@@ -100,7 +162,7 @@ export default function Sidebar() {
                   
                   {(!isCollapsed || isMobile) && openMenus[item.label] && (
                     <ul className={`${isCollapsed ? 'ml-0' : 'ml-6'} mt-1 space-y-1`}>
-                      {item.items.map((subItem) => (
+                      {item.items.filter(subItem => subItem.show).map((subItem) => (
                         <li key={subItem.label}>
                           <Link href={subItem.href} passHref>
                             <div
@@ -126,17 +188,32 @@ export default function Sidebar() {
       <div className={`absolute bottom-0 w-full p-4 border-t border-sidebar-lighter
         ${isCollapsed ? 'flex justify-center' : ''}
       `}>
-        <div className={`flex items-center ${isCollapsed ? 'flex-col' : ''}`}>
-          <div className="w-10 h-10 rounded-full bg-sidebar-light flex items-center justify-center mr-3">
-            <span className="material-icons">person</span>
-          </div>
-          {!isCollapsed && (
-            <div>
-              <div className="font-medium">Admin User</div>
-              <div className="text-xs text-sidebar-secondary">admin@lekkercmms.com</div>
+        {currentUser ? (
+          <div className={`flex items-center ${isCollapsed ? 'flex-col' : ''}`}>
+            <div className="w-10 h-10 rounded-full bg-sidebar-light flex items-center justify-center mr-3">
+              <span className="material-icons">person</span>
             </div>
-          )}
-        </div>
+            {!isCollapsed && (
+              <div>
+                <div className="font-medium">{currentUser.full_name}</div>
+                <div className="text-xs text-sidebar-secondary capitalize">{currentUser.role}</div>
+                <button 
+                  onClick={handleLogout}
+                  className="text-xs mt-1 text-sidebar-secondary hover:text-white"
+                >
+                  Logout
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <Link href="/login" passHref>
+            <div className={`flex items-center ${isCollapsed ? 'justify-center' : ''} p-2 rounded-lg hover:bg-sidebar-light cursor-pointer`}>
+              <span className="material-icons mr-2">login</span>
+              {!isCollapsed && <span>Login</span>}
+            </div>
+          </Link>
+        )}
       </div>
     </div>
   );
