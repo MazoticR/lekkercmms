@@ -1,4 +1,3 @@
-// pages/admin/users.tsx
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { getCurrentUser, hasPermission, hashPassword } from '../../lib/auth';
@@ -12,6 +11,7 @@ type User = {
 };
 
 export default function UserManagement() {
+  const [isClient, setIsClient] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<string[]>([]);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -27,8 +27,12 @@ export default function UserManagement() {
   const currentUser = getCurrentUser();
 
   useEffect(() => {
-    if (!hasPermission(currentUser, 'admin')) {
-      router.push('/');
+    setIsClient(true);
+    if (!currentUser || !hasPermission(currentUser, 'admin')) {
+      if (typeof window !== 'undefined') {
+        router.push('/');
+      }
+      return;
     }
     fetchUsers();
     fetchRoles();
@@ -89,44 +93,28 @@ export default function UserManagement() {
     }
   }
 
-async function updateUser() {
-  if (!editingUser) return;
-
-  try {
-    // First verify the role exists
-    const { data: roleData, error: roleError } = await supabase
-      .from('app_roles')
-      .select('name')
-      .eq('name', editingUser.role)
-      .single();
-
-    if (roleError || !roleData) {
-      throw new Error(`Role "${editingUser.role}" does not exist`);
+  async function updateUser() {
+    if (!editingUser) return;
+    
+    try {
+      const { error } = await supabase
+        .from('app_users')
+        .update({
+          full_name: editingUser.full_name,
+          role: editingUser.role
+        })
+        .eq('id', editingUser.id);
+      
+      if (error) throw error;
+      
+      setSuccess(`User ${editingUser.username} updated`);
+      setEditingUser(null);
+      fetchUsers();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to update user');
     }
-
-    // Then update the user
-    const { error } = await supabase
-      .from('app_users')
-      .update({
-        full_name: editingUser.full_name,
-        role: editingUser.role
-      })
-      .eq('id', editingUser.id);
-
-    if (error) throw error;
-
-    setSuccess(`User updated to ${editingUser.role} role`);
-    setEditingUser(null);
-    fetchUsers();
-  } catch (error) {
-    console.error('Update error details:', error);
-    setError(
-      error instanceof Error 
-        ? error.message 
-        : 'Failed to update user. Check console for details.'
-    );
   }
-}
 
   async function deleteUser(id: string) {
     if (!confirm('Are you sure you want to delete this user?')) return;
@@ -147,8 +135,7 @@ async function updateUser() {
     }
   }
 
-  if (!currentUser) {
-    router.push('/login');
+  if (!isClient || !currentUser) {
     return null;
   }
 
@@ -159,7 +146,6 @@ async function updateUser() {
       {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4">{error}</div>}
       {success && <div className="bg-green-100 text-green-700 p-3 rounded mb-4">{success}</div>}
 
-      {/* Create User */}
       <div className="bg-white p-4 rounded shadow mb-6">
         <h2 className="text-xl font-semibold mb-4">Create New User</h2>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
@@ -202,7 +188,6 @@ async function updateUser() {
         </button>
       </div>
 
-      {/* Users List */}
       <div className="bg-white rounded shadow overflow-hidden">
         <table className="min-w-full">
           <thead className="bg-gray-50">

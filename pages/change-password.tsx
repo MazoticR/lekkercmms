@@ -1,15 +1,10 @@
-// pages/change-password.tsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
-import { 
-  getCurrentUser, 
-  logout, 
-  hashPassword,
-  verifyPassword 
-} from '../lib/auth';
+import { getCurrentUser, logout, hashPassword, verifyPassword } from '../lib/auth';
 import supabase from '../lib/supabaseClient';
 
 export default function ChangePassword() {
+  const [isClient, setIsClient] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -17,17 +12,19 @@ export default function ChangePassword() {
   const [success, setSuccess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  const user = getCurrentUser();
+  const currentUser = getCurrentUser();
+
+  useEffect(() => {
+    setIsClient(true);
+    if (!currentUser && typeof window !== 'undefined') {
+      router.push('/login');
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
-
-    if (!user) {
-      setError('You must be logged in to change your password');
-      return;
-    }
 
     if (newPassword !== confirmPassword) {
       setError('New passwords do not match');
@@ -42,38 +39,33 @@ export default function ChangePassword() {
     setIsLoading(true);
 
     try {
-      // 1. Verify current password
+      // Verify current password
       const { data, error: fetchError } = await supabase
         .from('app_users')
         .select('password_hash')
-        .eq('username', user.username)
+        .eq('username', currentUser?.username)
         .single();
 
-      if (fetchError || !data?.password_hash) {
-        throw new Error('Failed to verify current password');
-      }
+      if (fetchError || !data) throw new Error('Failed to verify current password');
 
       const isValid = await verifyPassword(currentPassword, data.password_hash);
-      if (!isValid) {
-        throw new Error('Current password is incorrect');
-      }
+      if (!isValid) throw new Error('Current password is incorrect');
 
-      // 2. Hash and update new password
+      // Update password
       const newHash = await hashPassword(newPassword);
       const { error: updateError } = await supabase
         .from('app_users')
         .update({ password_hash: newHash })
-        .eq('username', user.username);
+        .eq('username', currentUser?.username);
 
-      if (updateError) {
-        throw updateError;
-      }
+      if (updateError) throw updateError;
 
-      // 3. Success - logout and redirect
-      setSuccess('Password changed successfully. You will be logged out shortly.');
+      setSuccess('Password changed successfully');
       setTimeout(() => {
         logout();
-        router.push('/login');
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
       }, 2000);
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : 'Password change failed');
@@ -82,8 +74,7 @@ export default function ChangePassword() {
     }
   };
 
-  if (!user) {
-    router.push('/login');
+  if (!isClient || !currentUser) {
     return null;
   }
 
@@ -92,8 +83,17 @@ export default function ChangePassword() {
       <div className="bg-white p-8 rounded shadow-md w-full max-w-md">
         <h1 className="text-2xl font-bold mb-6 text-center">Change Password</h1>
         
-        {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4">{error}</div>}
-        {success && <div className="bg-green-100 text-green-700 p-3 rounded mb-4">{success}</div>}
+        {error && (
+          <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4">
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-4">
+            {success}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit}>
           <div className="mb-4">
@@ -142,7 +142,7 @@ export default function ChangePassword() {
               isLoading ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
-            {isLoading ? 'Changing Password...' : 'Change Password'}
+            {isLoading ? 'Changing...' : 'Change Password'}
           </button>
         </form>
       </div>

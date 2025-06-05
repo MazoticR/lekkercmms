@@ -1,4 +1,3 @@
-// pages/admin/roles.tsx
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { getCurrentUser, hasPermission } from '../../lib/auth';
@@ -20,6 +19,7 @@ const ALL_PERMISSIONS = [
 ];
 
 export default function RoleManagement() {
+  const [isClient, setIsClient] = useState(false);
   const [roles, setRoles] = useState<Role[]>([]);
   const [newRole, setNewRole] = useState({
     name: '',
@@ -32,8 +32,12 @@ export default function RoleManagement() {
   const currentUser = getCurrentUser();
 
   useEffect(() => {
-    if (!hasPermission(currentUser, 'admin')) {
-      router.push('/');
+    setIsClient(true);
+    if (!currentUser || !hasPermission(currentUser, 'admin')) {
+      if (typeof window !== 'undefined') {
+        router.push('/');
+      }
+      return;
     }
     fetchRoles();
   }, []);
@@ -126,8 +130,7 @@ export default function RoleManagement() {
     });
   }
 
-  if (!currentUser) {
-    router.push('/login');
+  if (!isClient || !currentUser) {
     return null;
   }
 
@@ -138,7 +141,6 @@ export default function RoleManagement() {
       {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4">{error}</div>}
       {success && <div className="bg-green-100 text-green-700 p-3 rounded mb-4">{success}</div>}
 
-      {/* Create New Role */}
       <div className="bg-white p-4 rounded shadow mb-6">
         <h2 className="text-xl font-semibold mb-4">Create New Role</h2>
         <div className="flex flex-col md:flex-row gap-4 mb-4">
@@ -158,7 +160,6 @@ export default function RoleManagement() {
         </div>
       </div>
 
-      {/* Roles List */}
       <div className="bg-white rounded shadow overflow-hidden">
         <table className="min-w-full">
           <thead className="bg-gray-50">
