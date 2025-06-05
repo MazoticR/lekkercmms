@@ -95,6 +95,8 @@ export function logout(): void {
 // lib/auth.ts
 export function hasPermission(user: AppUser | null, requiredRoles: string | string[]): boolean {
   if (!user) return false;
+
+  if(user.role === 'admin') return true;
   
   // Convert single role to array
   const roles = Array.isArray(requiredRoles) ? requiredRoles : [requiredRoles];

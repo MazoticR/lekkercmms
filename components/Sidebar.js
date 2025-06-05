@@ -60,13 +60,19 @@ export default function Sidebar() {
           href: '/inventory', 
           icon: 'inventory', 
           label: 'Inventario',
-          show: hasPermission(currentUser, ['maintenace', 'manager'])
+          show: hasPermission(currentUser, ['maintenance', 'manager'])
         },
                 { 
           href: '/tools/machine-orders', 
           icon: 'shopping_basket', 
-          label: 'Ordenes para maquinas',
+          label: 'Ordenes mantenimiento',
           show: hasPermission(currentUser, ['maintenance', 'manager'])
+        },
+        { 
+          href: '/transport', 
+          icon: 'local_shipping', 
+          label: 'Transportes',
+          show: hasPermission(currentUser, [ 'manager'])
         },
       ]
     },
