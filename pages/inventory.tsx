@@ -4,14 +4,6 @@ import { Database } from '../types/db_types';
 import Head from 'next/head';
 
 type InventoryPart = Database['inventory_parts']['Row'];
-type MachinePartWithMachine = {
-  id: number;
-  machines: {
-    machine_number: string;
-    description: string | null;
-  } | null;
-};
-
 type AffectedMachine = {
   id: number;
   machine_number: string | null;
@@ -94,66 +86,68 @@ export default function InventoryPage() {
     }
   }
 
-async function prepareDelete(id: number) {
-  // 1. Get machine parts
-  const { data: machineParts, error } = await supabase
-    .from('machine_parts')
-    .select('id, machine_id')
-    .eq('inventory_part_id', id);
+  async function prepareDelete(id: number) {
+    const { data: machineParts, error } = await supabase
+      .from('machine_parts')
+      .select('id, machine_id')
+      .eq('inventory_part_id', id);
 
-  if (error) {
-    console.error(error);
-    showNotification('Failed to check dependencies', 'error');
-    return;
+    if (error) {
+      console.error(error);
+      showNotification('Failed to check dependencies', 'error');
+      return;
+    }
+
+    const affectedMachines = await Promise.all(
+      (machineParts || []).map(async (part) => {
+        const { data: machine } = await supabase
+          .from('machines')
+          .select('machine_number, description')
+          .eq('id', part.machine_id)
+          .single();
+
+        return {
+          id: part.id,
+          machine_number: machine?.machine_number || null,
+          description: machine?.description || null
+        };
+      })
+    );
+
+    setConfirmDelete({
+      id,
+      affectedMachines
+    });
   }
-
-  // 2. Get machine details for each
-  const affectedMachines = await Promise.all(
-    (machineParts || []).map(async (part) => {
-      const { data: machine } = await supabase
-        .from('machines')
-        .select('machine_number, description')
-        .eq('id', part.machine_id)
-        .single();
-
-      return {
-        id: part.id,
-        machine_number: machine?.machine_number || null,
-        description: machine?.description || null
-      };
-    })
-  );
-
-  setConfirmDelete({
-    id,
-    affectedMachines
-  });
-}
 
   async function deletePart() {
     if (!confirmDelete) return;
 
     try {
-      const { error } = await supabase
+      // First break the relationship in machine_parts
+      const { error: clearError } = await supabase
+        .from('machine_parts')
+        .update({ inventory_part_id: null })
+        .eq('inventory_part_id', confirmDelete.id);
+
+      if (clearError) throw clearError;
+
+      // Then delete the inventory part
+      const { error: deleteError } = await supabase
         .from('inventory_parts')
         .delete()
         .eq('id', confirmDelete.id);
 
-      if (error) throw error;
-      
+      if (deleteError) throw deleteError;
+
       showNotification(
-        `Part deleted${confirmDelete.affectedMachines.length ? ` (removed from ${confirmDelete.affectedMachines.length} machine(s))` : ''}`,
+        'Part deleted (kept in machine history)',
         'success'
       );
       fetchParts();
-    } catch (error: any) {
-      showNotification(
-        error.message.includes('foreign key') 
-          ? 'Deletion failed: Part is in use' 
-          : 'Failed to delete part',
-        'error'
-      );
-      console.error('Delete error:', error);
+    } catch (error) {
+      console.error('Deletion error:', error);
+      showNotification('Failed to delete part', 'error');
     } finally {
       setConfirmDelete(null);
     }
@@ -218,12 +212,10 @@ async function prepareDelete(id: number) {
 
   return (
     <div className="p-8 relative">
-
       <Head>
         <title>Inventory</title>
       </Head>
 
-      {/* Notification System */}
       {notification && (
         <div
           className={`fixed top-4 right-4 p-4 rounded-md shadow-lg z-50 flex items-center ${
@@ -242,7 +234,6 @@ async function prepareDelete(id: number) {
         </div>
       )}
 
-      {/* Enhanced Delete Confirmation Modal */}
       {confirmDelete && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
@@ -253,14 +244,14 @@ async function prepareDelete(id: number) {
                 <p className="mb-2">This part is used by:</p>
                 <ul className="list-disc pl-5 mb-4 max-h-40 overflow-y-auto">
                   {confirmDelete.affectedMachines.map(m => (
-                       <li key={m.id} className="py-1">
-                        {m.machine_number || 'Unknown machine'}
-                        {m.description && ` - ${m.description}`}
-                      </li>
+                    <li key={m.id} className="py-1">
+                      {m.machine_number || 'Unknown machine'}
+                      {m.description && ` - ${m.description}`}
+                    </li>
                   ))}
                 </ul>
-                <p className="text-red-600 mb-4">
-                  Deleting will remove it from all {confirmDelete.affectedMachines.length} machine(s)!
+                <p className="mb-4">
+                  The part will be removed from inventory but kept in machine history records.
                 </p>
               </>
             ) : (
@@ -278,7 +269,7 @@ async function prepareDelete(id: number) {
                 onClick={deletePart}
                 className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
               >
-                {confirmDelete.affectedMachines.length ? 'Delete Anyway' : 'Delete'}
+                Confirm Delete
               </button>
             </div>
           </div>
@@ -287,7 +278,6 @@ async function prepareDelete(id: number) {
 
       <h1 className="text-3xl font-bold mb-6 text-gray-800">Inventory Management</h1>
 
-      {/* Add Part Form */}
       <form onSubmit={addPart} className="bg-white p-6 rounded-lg shadow-md mb-8">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
           <input
@@ -339,7 +329,6 @@ async function prepareDelete(id: number) {
         </button>
       </form>
 
-      {/* Inventory Table */}
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -359,12 +348,10 @@ async function prepareDelete(id: number) {
                 key={part.id} 
                 className={part.quantity <= part.min_quantity ? 'bg-red-50' : 'hover:bg-gray-50'}
               >
-                {/* Part Number */}
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   {part.part_number}
                 </td>
 
-                {/* Description */}
                 <td 
                   className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer"
                   onClick={() => startEditing(part, 'description')}
@@ -383,7 +370,6 @@ async function prepareDelete(id: number) {
                   )}
                 </td>
 
-                {/* Quantity */}
                 <td 
                   className={`px-6 py-4 whitespace-nowrap text-sm cursor-pointer ${
                     part.quantity <= part.min_quantity ? 'text-red-600 font-bold' : 'text-gray-500'
@@ -405,7 +391,6 @@ async function prepareDelete(id: number) {
                   )}
                 </td>
 
-                {/* Cost */}
                 <td 
                   className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer"
                   onClick={() => startEditing(part, 'cost')}
@@ -426,7 +411,6 @@ async function prepareDelete(id: number) {
                   )}
                 </td>
 
-                {/* Min Quantity */}
                 <td 
                   className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 cursor-pointer"
                   onClick={() => startEditing(part, 'min_quantity')}
@@ -446,19 +430,17 @@ async function prepareDelete(id: number) {
                   )}
                 </td>
 
-                {/* Last Updated */}
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {new Date(part.last_updated).toLocaleString()}
                 </td>
 
-      {/* Update your delete button in the table to use prepareDelete */}
-      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-        <button
-          onClick={() => prepareDelete(part.id)}
-          className="text-red-600 hover:text-red-800"
-        >
-          Delete
-        </button>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <button
+                    onClick={() => prepareDelete(part.id)}
+                    className="text-red-600 hover:text-red-800"
+                  >
+                    Delete
+                  </button>
                 </td>
               </tr>
             ))}
