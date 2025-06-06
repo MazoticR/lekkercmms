@@ -54,6 +54,9 @@ const MachineDetailPage = () => {
   const [searchResults, setSearchResults] = useState<InventoryPart[]>([]);
   const [editingPart, setEditingPart] = useState<MachinePart | null>(null);
   const [showQRModal, setShowQRModal] = useState(false);
+  const [editingStatus, setEditingStatus] = useState(false);
+  const [newStatus, setNewStatus] = useState<MachineStatus>(machine?.status || 'operational');
+  const [trackReplacement, setTrackReplacement] = useState(true); // Add this with your other state declarations
 
   useEffect(() => {
     if (machineId) {
@@ -145,13 +148,35 @@ const MachineDetailPage = () => {
     }
   }
 
-  async function addOrUpdatePart(e: FormEvent) {
-    e.preventDefault();
-    if (!selectedInventoryPart) return;
-    
-    const selectedPart = inventoryParts.find(part => part.id === selectedInventoryPart);
-    if (!selectedPart) return;
+  async function handleStatusChange(newStatus: MachineStatus) {
+  if (!machine) return;
+  
+  const { error } = await supabase
+    .from('machines')
+    .update({ 
+      status: newStatus,
+      last_updated: new Date().toISOString()
+    })
+    .eq('id', machine.id);
 
+  if (error) {
+    console.error('Error updating machine status:', error);
+    toast.error('Failed to update status');
+  } else {
+    setMachine({...machine, status: newStatus});
+    toast.success('Status updated successfully');
+  }
+}
+
+async function addOrUpdatePart(e: FormEvent) {
+  e.preventDefault();
+  if (!selectedInventoryPart) return;
+  
+  const selectedPart = inventoryParts.find(part => part.id === selectedInventoryPart);
+  if (!selectedPart) return;
+
+  if (editingPart) {
+    // Update existing part
     const partData = {
       last_replaced_date: lastReplacedDate ? lastReplacedDate : null,
       notes: notes || null,
@@ -159,70 +184,60 @@ const MachineDetailPage = () => {
       last_updated: new Date().toISOString()
     };
 
-    if (editingPart) {
-      // Update existing part without incrementing times_replaced
-      const { error } = await supabase
-        .from('machine_parts')
-        .update(partData)
-        .eq('id', editingPart.id);
-      
-      if (error) {
-        console.error('Error updating part:', error);
-      } else {
-        resetForm();
-        await updateMachineTimestamp();
-        fetchParts();
-      }
+    const { error } = await supabase
+      .from('machine_parts')
+      .update(partData)
+      .eq('id', editingPart.id);
+    
+    if (error) {
+      console.error('Error updating part:', error);
+      toast.error('Failed to update part');
     } else {
-      // Handle new part or replacement
-      const existingPart = parts.find(part => part.inventory_part_id === selectedInventoryPart);
+      resetForm();
+      await updateMachineTimestamp();
+      fetchParts();
+      toast.success('Part updated successfully');
+    }
+  } else {
+    // Handle new part or replacement
+    const existingParts = parts.filter(part => part.inventory_part_id === selectedInventoryPart);
+    const latestExistingPart = existingParts[0]; // Get the most recent one
 
-      if (existingPart) {
-        // Increment times_replaced only if this is a replacement
-        const { error } = await supabase
-          .from('machine_parts')
-          .update({
-            ...partData,
-            times_replaced: (existingPart.times_replaced || 0) + 1
-          })
-          .eq('id', existingPart.id);
-        
-        if (error) {
-          console.error('Error updating part:', error);
-        } else {
-          resetForm();
-          await updateMachineTimestamp();
-          fetchParts();
-        }
-      } else {
-        // Add new part
-        const newPart = {
-          machine_id: machineId,
-          part_name: selectedPart.part_number,
-          code: selectedPart.description || '',
-          inventory_part_id: selectedInventoryPart,
-          times_replaced: 1,
-          ...partData
-        };
+    const newPart = {
+      machine_id: machineId,
+      part_name: selectedPart.part_number,
+      code: selectedPart.description || '',
+      inventory_part_id: selectedInventoryPart,
+      last_replaced_date: lastReplacedDate ? lastReplacedDate : null,
+      notes: notes || null,
+      cost: cost !== null ? cost : selectedPart.cost || null,
+      times_replaced: trackReplacement && latestExistingPart 
+        ? (latestExistingPart.times_replaced || 0) + 1 
+        : 1,
+      last_updated: new Date().toISOString()
+    };
 
-        const { error } = await supabase
-          .from('machine_parts')
-          .insert(newPart);
-        
-        if (error) {
-          console.error('Error adding part:', error);
-        } else {
-          resetForm();
-          await updateMachineTimestamp();
-          fetchParts();
-          
-          await supabase.rpc('decrement_inventory', {
-            part_id: selectedInventoryPart
-          });
-        }
-      }
+    const { error } = await supabase
+      .from('machine_parts')
+      .insert(newPart);
+    
+    if (error) {
+      console.error('Error adding part:', error);
+      toast.error('Failed to add part');
+    } else {
+      resetForm();
+      await updateMachineTimestamp();
+      fetchParts();
+      
+      // Decrement inventory if needed
+      await supabase.rpc('decrement_inventory', {
+        part_id: selectedInventoryPart
+      });
+      
+      toast.success('Part added successfully');
     }
   }
+}
 
   function startEditPart(part: MachinePart) {
     setEditingPart(part);
@@ -357,21 +372,29 @@ const MachineDetailPage = () => {
                   </div>
                 </div>
               </div>
-              <div className="flex flex-col items-end space-y-2">
-                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                  machine.status === 'operational' ? 'bg-green-100 text-green-800' :
-                  machine.status === 'maintenance' ? 'bg-yellow-100 text-yellow-800' :
-                  'bg-red-100 text-red-800'
-                }`}>
-                  {MACHINE_STATUSES.find(s => s.value === machine.status)?.label}
-                </span>
-                <button
-                  onClick={() => setShowQRModal(true)}
-                  className="bg-purple-600 hover:bg-purple-700 text-white py-1 px-3 rounded text-sm transition duration-200"
-                >
-                  Show QR Code
-                </button>
-              </div>
+                <div className="flex flex-col items-end space-y-2">
+                  <select
+                    value={machine?.status || 'operational'}
+                    onChange={(e) => handleStatusChange(e.target.value as MachineStatus)}
+                    className={`p-1 rounded-full text-sm font-medium ${
+                      machine?.status === 'operational' ? 'bg-green-100 text-green-800' :
+                      machine?.status === 'maintenance' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    } cursor-pointer border-none focus:ring-2 focus:ring-purple-500`}
+                  >
+                    {MACHINE_STATUSES.map((status) => (
+                      <option key={status.value} value={status.value}>
+                        {status.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => setShowQRModal(true)}
+                    className="bg-purple-600 hover:bg-purple-700 text-white py-1 px-3 rounded text-sm transition duration-200"
+                  >
+                    Show QR Code
+                  </button>
+                </div>
             </div>
           </div>
 
@@ -475,24 +498,36 @@ const MachineDetailPage = () => {
                 onChange={(e) => setNotes(e.target.value)}
                 className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
+                <div className="flex items-center mb-4">
+                <input
+                  type="checkbox"
+                  id="trackReplacement"
+                  checked={trackReplacement}
+                  onChange={(e) => setTrackReplacement(e.target.checked)}
+                  className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                />
+                <label htmlFor="trackReplacement" className="ml-2 block text-sm text-gray-700">
+                  Track replacement count
+                </label>
+              </div>
             </div>
-            <button 
-              type="submit" 
-              className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded transition duration-200"
-              disabled={!selectedInventoryPart}
-            >
-              {editingPart ? 'Update Part' : 
-       parts.some(p => p.inventory_part_id === selectedInventoryPart) ? 'Replace Part' : 'Add Part'}
-            </button>
-                {editingPart && (
-                    <button
-                      type="button"
-                      onClick={cancelEditPart}
-                      className="ml-2 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded transition duration-200"
-                    >
-                      Cancel
-                    </button>
-               )}
+                <button 
+                  type="submit" 
+                  className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded transition duration-200"
+                  disabled={!selectedInventoryPart}
+                >
+                  {editingPart ? 'Update Part' : 
+                  parts.some(p => p.inventory_part_id === selectedInventoryPart) ? 'Add Replacement' : 'Add Part'}
+                </button>
+              {editingPart && (
+                <button
+                  type="button"
+                  onClick={cancelEditPart}
+                  className="ml-2 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded transition duration-200"
+                >
+                  Cancel
+                </button>
+              )}
           </form>
 
           <div className="bg-white rounded-lg shadow-md overflow-x-auto w-full">

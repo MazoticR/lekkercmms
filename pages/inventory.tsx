@@ -4,9 +4,18 @@ import { Database } from '../types/db_types';
 import Head from 'next/head';
 
 type InventoryPart = Database['inventory_parts']['Row'];
+type MachinePartWithMachine = {
+  id: number;
+  machines: {
+    machine_number: string;
+    description: string | null;
+  } | null;
+};
+
 type AffectedMachine = {
   id: number;
-  machines: { name: string };
+  machine_number: string | null;
+  description: string | null;
 };
 
 export default function InventoryPage() {
@@ -86,26 +95,38 @@ export default function InventoryPage() {
   }
 
 async function prepareDelete(id: number) {
-  // Define the exact type we expect to get back
-  type MachinePartWithMachine = {
-    id: number;
-    machines: { name: string };
-  };
-
-  const { data: affectedMachines, error } = await supabase
+  // 1. Get machine parts
+  const { data: machineParts, error } = await supabase
     .from('machine_parts')
-    .select('id, machines!inner(name)')
-    .eq('inventory_part_id', id) as { data: MachinePartWithMachine[] | null, error: any };
+    .select('id, machine_id')
+    .eq('inventory_part_id', id);
 
   if (error) {
-    console.error('Error checking affected machines:', error);
-    showNotification('Failed to check machine dependencies', 'error');
+    console.error(error);
+    showNotification('Failed to check dependencies', 'error');
     return;
   }
 
+  // 2. Get machine details for each
+  const affectedMachines = await Promise.all(
+    (machineParts || []).map(async (part) => {
+      const { data: machine } = await supabase
+        .from('machines')
+        .select('machine_number, description')
+        .eq('id', part.machine_id)
+        .single();
+
+      return {
+        id: part.id,
+        machine_number: machine?.machine_number || null,
+        description: machine?.description || null
+      };
+    })
+  );
+
   setConfirmDelete({
     id,
-    affectedMachines: affectedMachines || []
+    affectedMachines
   });
 }
 
@@ -232,7 +253,10 @@ async function prepareDelete(id: number) {
                 <p className="mb-2">This part is used by:</p>
                 <ul className="list-disc pl-5 mb-4 max-h-40 overflow-y-auto">
                   {confirmDelete.affectedMachines.map(m => (
-                    <li key={m.id} className="py-1">{m.machines.name}</li>
+                       <li key={m.id} className="py-1">
+                        {m.machine_number || 'Unknown machine'}
+                        {m.description && ` - ${m.description}`}
+                      </li>
                   ))}
                 </ul>
                 <p className="text-red-600 mb-4">

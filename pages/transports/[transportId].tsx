@@ -2,6 +2,8 @@ import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/router';
 import supabase from '../../lib/supabaseClient';
 import Head from 'next/head';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const TRANSPORT_STATUSES = [
   { value: 'operational', label: 'Operational' },
@@ -54,7 +56,8 @@ const TransportDetailPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<InventoryPart[]>([]);
   const [editingPart, setEditingPart] = useState<TransportPart | null>(null);
-
+  const [trackReplacement, setTrackReplacement] = useState(true);
+  
   useEffect(() => {
     if (transportId) {
       fetchTransport();
@@ -145,13 +148,15 @@ const TransportDetailPage = () => {
     }
   }
 
-  async function addOrUpdatePart(e: FormEvent) {
-    e.preventDefault();
-    if (!selectedInventoryPart) return;
-    
-    const selectedPart = inventoryParts.find(part => part.id === selectedInventoryPart);
-    if (!selectedPart) return;
+async function addOrUpdatePart(e: FormEvent) {
+  e.preventDefault();
+  if (!selectedInventoryPart) return;
+  
+  const selectedPart = inventoryParts.find(part => part.id === selectedInventoryPart);
+  if (!selectedPart) return;
 
+  if (editingPart) {
+    // Update existing part
     const partData = {
       last_replaced_date: lastReplacedDate ? lastReplacedDate : null,
       notes: notes || null,
@@ -159,70 +164,60 @@ const TransportDetailPage = () => {
       last_updated: new Date().toISOString()
     };
 
-    if (editingPart) {
-      // Update existing part without incrementing times_replaced
-      const { error } = await supabase
-        .from('transport_parts')
-        .update(partData)
-        .eq('id', editingPart.id);
-      
-      if (error) {
-        console.error('Error updating part:', error);
-      } else {
-        resetForm();
-        await updateTransportTimestamp();
-        fetchParts();
-      }
+    const { error } = await supabase
+      .from('transport_parts')
+      .update(partData)
+      .eq('id', editingPart.id);
+    
+    if (error) {
+      console.error('Error updating part:', error);
+      toast.error('Failed to update part');
     } else {
-      // Handle new part or replacement
-      const existingPart = parts.find(part => part.inventory_part_id === selectedInventoryPart);
+      resetForm();
+      await updateTransportTimestamp();
+      fetchParts();
+      toast.success('Part updated successfully');
+    }
+  } else {
+    // Always create new entry for new parts/replacements
+    const existingParts = parts.filter(part => part.inventory_part_id === selectedInventoryPart);
+    const latestExistingPart = existingParts[0]; // Get most recent
 
-      if (existingPart) {
-        // Increment times_replaced only if this is a replacement
-        const { error } = await supabase
-          .from('transport_parts')
-          .update({
-            ...partData,
-            times_replaced: (existingPart.times_replaced || 0) + 1
-          })
-          .eq('id', existingPart.id);
-        
-        if (error) {
-          console.error('Error updating part:', error);
-        } else {
-          resetForm();
-          await updateTransportTimestamp();
-          fetchParts();
-        }
-      } else {
-        // Add new part
-        const newPart = {
-          transport_id: transportId,
-          part_name: selectedPart.part_number,
-          code: selectedPart.description || '',
-          inventory_part_id: selectedInventoryPart,
-          times_replaced: 1,
-          ...partData
-        };
+    const newPart = {
+      transport_id: transportId,
+      part_name: selectedPart.part_number,
+      code: selectedPart.description || '',
+      inventory_part_id: selectedInventoryPart,
+      last_replaced_date: lastReplacedDate ? lastReplacedDate : null,
+      notes: notes || null,
+      cost: cost !== null ? cost : selectedPart.cost || null,
+      times_replaced: trackReplacement && latestExistingPart 
+        ? (latestExistingPart.times_replaced || 0) + 1 
+        : 1,
+      last_updated: new Date().toISOString()
+    };
 
-        const { error } = await supabase
-          .from('transport_parts')
-          .insert(newPart);
-        
-        if (error) {
-          console.error('Error adding part:', error);
-        } else {
-          resetForm();
-          await updateTransportTimestamp();
-          fetchParts();
-          
-          await supabase.rpc('decrement_inventory', {
-            part_id: selectedInventoryPart
-          });
-        }
-      }
+    const { error } = await supabase
+      .from('transport_parts')
+      .insert(newPart);
+    
+    if (error) {
+      console.error('Error adding part:', error);
+      toast.error('Failed to add part');
+    } else {
+      resetForm();
+      await updateTransportTimestamp();
+      fetchParts();
+      
+      // Decrement inventory if needed
+      await supabase.rpc('decrement_inventory', {
+        part_id: selectedInventoryPart
+      });
+      
+      toast.success('Part added successfully');
     }
   }
+}
 
   function startEditPart(part: TransportPart) {
     setEditingPart(part);
@@ -285,13 +280,49 @@ const TransportDetailPage = () => {
                   </div>
                 </div>
               </div>
-              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                transport.status === 'operational' ? 'bg-green-100 text-green-800' :
-                transport.status === 'maintenance' ? 'bg-yellow-100 text-yellow-800' :
-                'bg-red-100 text-red-800'
-              }`}>
-                {TRANSPORT_STATUSES.find(s => s.value === transport.status)?.label}
-              </span>
+
+                    <select
+                    value={transport?.status || 'operational'}
+                    onChange={async (e) => {
+                        const newStatus = e.target.value as TransportStatus;
+                        if (!transport) return;
+                        
+                        const { error } = await supabase
+                        .from('transports')
+                        .update({ 
+                            status: newStatus,
+                            last_updated: new Date().toISOString()
+                        })
+                        .eq('id', transport.id);
+
+                        if (error) {
+                        console.error('Error updating transport status:', error);
+                        toast.error('Failed to update status');
+                        } else {
+                        setTransport({...transport, status: newStatus});
+                        toast.success('Status updated successfully');
+                        }
+                    }}
+                    className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                        transport?.status === 'operational' ? 'bg-green-100 text-green-800' :
+                        transport?.status === 'maintenance' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                    } cursor-pointer border-none focus:ring-2 focus:ring-purple-500`}
+                    >
+                    {TRANSPORT_STATUSES.map((status) => (
+                        <option 
+                        key={status.value} 
+                        value={status.value}
+                        className={`${
+                            status.value === 'operational' ? 'bg-green-100 text-green-800' :
+                            status.value === 'maintenance' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                        }`}
+                        >
+                        {status.label}
+                        </option>
+                    ))}
+                    </select>
             </div>
           </div>
 
@@ -359,6 +390,18 @@ const TransportDetailPage = () => {
                 className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
             </div>
+            <div className="flex items-center mb-4">
+                <input
+                    type="checkbox"
+                    id="trackReplacement"
+                    checked={trackReplacement}
+                    onChange={(e) => setTrackReplacement(e.target.checked)}
+                    className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                />
+                <label htmlFor="trackReplacement" className="ml-2 block text-sm text-gray-700">
+                    Track replacement count
+                </label>
+                </div>
             <button 
               type="submit" 
               className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded transition duration-200"
