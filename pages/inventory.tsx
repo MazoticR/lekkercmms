@@ -4,11 +4,6 @@ import { Database } from '../types/db_types';
 import Head from 'next/head';
 
 type InventoryPart = Database['inventory_parts']['Row'];
-type AffectedMachine = {
-  id: number;
-  machine_number: string | null;
-  description: string | null;
-};
 
 export default function InventoryPage() {
   const [parts, setParts] = useState<InventoryPart[]>([]);
@@ -23,10 +18,7 @@ export default function InventoryPage() {
   } | null>(null);
   const [editingPart, setEditingPart] = useState<Partial<InventoryPart> | null>(null);
   const [editingField, setEditingField] = useState<keyof InventoryPart | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<{
-    id: number;
-    affectedMachines: AffectedMachine[];
-  } | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null); // Now just stores the ID
 
   useEffect(() => {
     fetchParts();
@@ -86,62 +78,29 @@ export default function InventoryPage() {
     }
   }
 
-  async function prepareDelete(id: number) {
-    const { data: machineParts, error } = await supabase
-      .from('machine_parts')
-      .select('id, machine_id')
-      .eq('inventory_part_id', id);
-
-    if (error) {
-      console.error(error);
-      showNotification('Failed to check dependencies', 'error');
-      return;
-    }
-
-    const affectedMachines = await Promise.all(
-      (machineParts || []).map(async (part) => {
-        const { data: machine } = await supabase
-          .from('machines')
-          .select('machine_number, description')
-          .eq('id', part.machine_id)
-          .single();
-
-        return {
-          id: part.id,
-          machine_number: machine?.machine_number || null,
-          description: machine?.description || null
-        };
-      })
-    );
-
-    setConfirmDelete({
-      id,
-      affectedMachines
-    });
-  }
 
   async function deletePart() {
     if (!confirmDelete) return;
 
     try {
-      // First break the relationship in machine_parts
+      // 1. First break the relationship in machine_parts
       const { error: clearError } = await supabase
         .from('machine_parts')
         .update({ inventory_part_id: null })
-        .eq('inventory_part_id', confirmDelete.id);
+        .eq('inventory_part_id', confirmDelete);
 
       if (clearError) throw clearError;
 
-      // Then delete the inventory part
+      // 2. Then delete the inventory part
       const { error: deleteError } = await supabase
         .from('inventory_parts')
         .delete()
-        .eq('id', confirmDelete.id);
+        .eq('id', confirmDelete);
 
       if (deleteError) throw deleteError;
 
       showNotification(
-        'Part deleted (kept in machine history)',
+        'Part deleted (reference kept in machine history)',
         'success'
       );
       fetchParts();
@@ -234,47 +193,28 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {confirmDelete && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
-            <h3 className="text-xl font-bold mb-2">Confirm Delete</h3>
-            
-            {confirmDelete.affectedMachines.length > 0 ? (
-              <>
-                <p className="mb-2">This part is used by:</p>
-                <ul className="list-disc pl-5 mb-4 max-h-40 overflow-y-auto">
-                  {confirmDelete.affectedMachines.map(m => (
-                    <li key={m.id} className="py-1">
-                      {m.machine_number || 'Unknown machine'}
-                      {m.description && ` - ${m.description}`}
-                    </li>
-                  ))}
-                </ul>
-                <p className="mb-4">
-                  The part will be removed from inventory but kept in machine history records.
-                </p>
-              </>
-            ) : (
-              <p className="mb-4">No machines are using this part.</p>
-            )}
-
-            <div className="flex justify-end space-x-4">
-              <button
-                onClick={() => setConfirmDelete(null)}
-                className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={deletePart}
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-              >
-                Confirm Delete
-              </button>
-            </div>
-          </div>
+  {confirmDelete && (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+        <h3 className="text-xl font-bold mb-4">Confirm Delete</h3>
+        <p className="mb-4">This will remove the part from inventory but keep its usage history in machines.</p>
+        <div className="flex justify-end space-x-4">
+          <button
+            onClick={() => setConfirmDelete(null)}
+            className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={deletePart}
+            className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+          >
+            Confirm Delete
+          </button>
         </div>
-      )}
+      </div>
+    </div>
+  )}
 
       <h1 className="text-3xl font-bold mb-6 text-gray-800">Inventory Management</h1>
 
@@ -436,7 +376,7 @@ export default function InventoryPage() {
 
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   <button
-                    onClick={() => prepareDelete(part.id)}
+                    onClick={() => setConfirmDelete(part.id)}
                     className="text-red-600 hover:text-red-800"
                   >
                     Delete

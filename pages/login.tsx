@@ -48,7 +48,7 @@ const handleSubmit = async (e: React.FormEvent) => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white p-8 rounded shadow-md w-full max-w-md">
-        <h1 className="text-2xl font-bold mb-6 text-center">Machine Orders Login</h1>
+        <h1 className="text-2xl font-bold mb-6 text-center">Login</h1>
         
         {error && (
           <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4">
