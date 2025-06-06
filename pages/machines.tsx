@@ -3,6 +3,12 @@ import { useRouter } from 'next/router';
 import supabase from '../lib/supabaseClient';
 import { MACHINE_STATUSES, MachineStatus } from '../lib/constants';
 import Head from 'next/head';
+import dynamic from 'next/dynamic';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+
+// Dynamically import QRCode to avoid SSR issues
+const QRCode = dynamic(() => import('react-qr-code'), { ssr: false });
 
 interface Machine {
   id: number;
@@ -26,6 +32,8 @@ const MachinesPage = () => {
   const [status, setStatus] = useState<MachineStatus>('operational');
   const [editingMachine, setEditingMachine] = useState<Machine | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedMachines, setSelectedMachines] = useState<number[]>([]);
+  const [showBulkPrintModal, setShowBulkPrintModal] = useState(false);
   const router = useRouter();
 
   const filteredMachines = useMemo(() => {
@@ -177,16 +185,207 @@ const MachinesPage = () => {
     setStatus('operational');
   }
 
+  function toggleMachineSelection(id: number) {
+    setSelectedMachines(prev => 
+      prev.includes(id) 
+        ? prev.filter(machineId => machineId !== id) 
+        : [...prev, id]
+    );
+  }
+
+  function printMachineQR(machine: Machine) {
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${window.location.origin}/machines/${machine.id}`)}`;
+      
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Machine QR Code - ${machine.machine_number}</title>
+            <style>
+              body { 
+                font-family: Arial, sans-serif;
+                display: flex; 
+                flex-direction: column; 
+                align-items: center; 
+                justify-content: center; 
+                height: 100vh; 
+                margin: 0; 
+                padding: 20px;
+              }
+              .card {
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                padding: 20px;
+                max-width: 400px;
+                text-align: center;
+              }
+              .qr-code {
+                margin: 15px auto;
+                width: 200px;
+                height: 200px;
+              }
+              .machine-info {
+                margin-top: 15px;
+                text-align: left;
+              }
+              .info-row {
+                margin-bottom: 8px;
+              }
+              .label {
+                font-weight: bold;
+                display: inline-block;
+                width: 100px;
+              }
+              @media print {
+                button {
+                  display: none;
+                }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <h2>Machine #${machine.machine_number}</h2>
+              <div class="qr-code">
+                <img src="${qrCodeUrl}" alt="QR Code" />
+              </div>
+              <div class="machine-info">
+                <div class="info-row"><span class="label">Description:</span> ${machine.description}</div>
+                <div class="info-row"><span class="label">Serial #:</span> ${machine.serial_number}</div>
+                <div class="info-row"><span class="label">Brand:</span> ${machine.brand}</div>
+                <div class="info-row"><span class="label">Model:</span> ${machine.model}</div>
+                <div class="info-row"><span class="label">Status:</span> ${MACHINE_STATUSES.find(s => s.value === machine.status)?.label}</div>
+              </div>
+            </div>
+            <button onclick="window.print()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 20px;">
+              Print QR Code
+            </button>
+            <script>
+              window.onload = function() {
+                window.print();
+              }
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+  }
+
+  function printSelectedMachines() {
+    if (selectedMachines.length === 0) {
+      toast.warning('Please select at least one machine to print');
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      const selected = machines.filter(m => selectedMachines.includes(m.id));
+      
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Machine QR Codes</title>
+            <style>
+              body {
+                font-family: Arial, sans-serif;
+                margin: 0;
+                padding: 20px;
+              }
+              .cards-container {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+                gap: 20px;
+                padding: 20px;
+              }
+              .card {
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                padding: 20px;
+                text-align: center;
+                page-break-inside: avoid;
+              }
+              .qr-code {
+                margin: 15px auto;
+                width: 200px;
+                height: 200px;
+              }
+              .machine-info {
+                margin-top: 15px;
+                text-align: left;
+              }
+              .info-row {
+                margin-bottom: 8px;
+              }
+              .label {
+                font-weight: bold;
+                display: inline-block;
+                width: 100px;
+              }
+              @media print {
+                button {
+                  display: none;
+                }
+              }
+            </style>
+          </head>
+          <body>
+            <h1 style="text-align: center; margin-bottom: 20px;">Machine QR Codes</h1>
+            <div class="cards-container">
+              ${selected.map(machine => {
+                const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${window.location.origin}/machines/${machine.id}`)}`;
+                return `
+                <div class="card">
+                  <h2>Machine #${machine.machine_number}</h2>
+                  <div class="qr-code">
+                    <img src="${qrCodeUrl}" alt="QR Code" />
+                  </div>
+                  <div class="machine-info">
+                    <div class="info-row"><span class="label">Description:</span> ${machine.description}</div>
+                    <div class="info-row"><span class="label">Serial #:</span> ${machine.serial_number}</div>
+                    <div class="info-row"><span class="label">Brand:</span> ${machine.brand}</div>
+                    <div class="info-row"><span class="label">Model:</span> ${machine.model}</div>
+                    <div class="info-row"><span class="label">Status:</span> ${MACHINE_STATUSES.find(s => s.value === machine.status)?.label}</div>
+                  </div>
+                </div>
+                `;
+              }).join('')}
+            </div>
+            <div style="text-align: center; margin-top: 20px;">
+              <button onclick="window.print()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                Print QR Codes
+              </button>
+            </div>
+            <script>
+              window.onload = function() {
+                window.print();
+              }
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+  }
+
   return (
-
-    
     <div className="p-8">
-
       <Head>
         <title>Machines</title>
       </Head>
 
-      <h1 className="text-3xl font-bold mb-6 text-gray-800">Machines Management</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-gray-800">Machines Management</h1>
+        <div className="flex space-x-2">
+          <button
+            onClick={() => setShowBulkPrintModal(true)}
+            className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded transition duration-200"
+          >
+            Bulk Print QR Codes
+          </button>
+        </div>
+      </div>
 
       <div className="mb-6">
         <div className="relative max-w-md">
@@ -277,6 +476,63 @@ const MachinesPage = () => {
         </div>
       </form>
 
+      {showBulkPrintModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg max-w-4xl w-full">
+            <h2 className="text-xl font-bold mb-4">Bulk Print QR Codes</h2>
+            <div className="max-h-[60vh] overflow-y-auto mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {machines.map(machine => (
+                  <div
+                    key={machine.id}
+                    onClick={() => toggleMachineSelection(machine.id)}
+                    className={`p-4 border rounded-lg cursor-pointer transition duration-200 ${
+                      selectedMachines.includes(machine.id)
+                        ? 'border-purple-500 bg-purple-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedMachines.includes(machine.id)}
+                        onChange={() => toggleMachineSelection(machine.id)}
+                        onClick={e => e.stopPropagation()}
+                        className="mr-3 h-5 w-5 text-purple-600 rounded focus:ring-purple-500"
+                      />
+                      <div>
+                        <h3 className="font-medium text-gray-900">Machine #{machine.machine_number}</h3>
+                        <p className="text-sm text-gray-500">{machine.description}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={() => {
+                  setShowBulkPrintModal(false);
+                  setSelectedMachines([]);
+                }}
+                className="bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded transition duration-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  printSelectedMachines();
+                  setShowBulkPrintModal(false);
+                }}
+                className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded transition duration-200"
+              >
+                Print Selected ({selectedMachines.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
@@ -337,6 +593,18 @@ const MachinesPage = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     <div className="flex space-x-2">
+                            <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              printMachineQR(machine);
+                            }}
+                            className="text-purple-600 hover:text-purple-800"
+                            title="Print QR Code"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                            </svg>
+                          </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();

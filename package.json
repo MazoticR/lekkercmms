@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@heroicons/react": "^2.2.0",
     "@supabase/supabase-js": "^2.49.4",
     "@tailwindcss/typography": "^0.5.16",
     "@types/bcryptjs": "^2.4.6",
@@ -21,7 +22,9 @@
     "next": "15.3.2",
     "node": "^22.16.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-qr-code": "^2.0.15",
+    "react-toastify": "^11.0.5"
   },
   "devDependencies": {
     "@types/bcrypt": "^5.0.2",

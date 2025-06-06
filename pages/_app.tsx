@@ -3,6 +3,7 @@ import type { AppProps } from "next/app";
 import Sidebar from "@/components/Sidebar";
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
+import 'react-toastify/dist/ReactToastify.css';
 
 export default function App({ Component, pageProps }: AppProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);

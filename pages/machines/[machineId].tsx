@@ -3,6 +3,12 @@ import { useRouter } from 'next/router';
 import supabase from '../../lib/supabaseClient';
 import { MACHINE_STATUSES, MachineStatus } from '../../lib/constants';
 import Head from 'next/head';
+import dynamic from 'next/dynamic';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+
+// Dynamically import QRCode to avoid SSR issues
+const QRCode = dynamic(() => import('react-qr-code'), { ssr: false });
 
 interface Machine {
   id: number;
@@ -47,6 +53,7 @@ const MachineDetailPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<InventoryPart[]>([]);
   const [editingPart, setEditingPart] = useState<MachinePart | null>(null);
+  const [showQRModal, setShowQRModal] = useState(false);
 
   useEffect(() => {
     if (machineId) {
@@ -231,18 +238,89 @@ const MachineDetailPage = () => {
     resetForm();
   }
 
-function resetForm() {
-  setEditingPart(null);
-  setSelectedInventoryPart(null);
-  setLastReplacedDate('');
-  setNotes('');
-  setCost(null);
-  setSearchTerm('');
-}
+  function resetForm() {
+    setEditingPart(null);
+    setSelectedInventoryPart(null);
+    setLastReplacedDate('');
+    setNotes('');
+    setCost(null);
+    setSearchTerm('');
+  }
+
+  function copyMachineUrl() {
+    const url = `${window.location.origin}/machines/${machineId}`;
+    navigator.clipboard.writeText(url);
+    toast.success('Machine URL copied to clipboard!');
+  }
+
+  function printQRCode() {
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Machine QR Code - ${machine?.machine_number}</title>
+            <style>
+              body { 
+                display: flex; 
+                flex-direction: column; 
+                align-items: center; 
+                justify-content: center; 
+                height: 100vh; 
+                margin: 0; 
+                padding: 20px;
+                font-family: Arial, sans-serif;
+              }
+              h1 { 
+                margin-bottom: 20px; 
+                text-align: center;
+              }
+              .machine-info {
+                margin-bottom: 20px;
+                text-align: center;
+              }
+              .qr-code {
+                width: 256px;
+                height: 256px;
+                margin: 0 auto;
+              }
+              @media print {
+                button { display: none; }
+              }
+            </style>
+          </head>
+          <body>
+            <h1>Machine #${machine?.machine_number}</h1>
+            <div class="machine-info">
+              <p>${machine?.description}</p>
+              <p>Serial: ${machine?.serial_number}</p>
+            </div>
+            <div class="qr-code">
+              ${typeof window !== 'undefined' && (
+                `<QRCode 
+                  value="${window.location.origin}/machines/${machineId}"
+                  size={256}
+                  level="H"
+                />`
+              )}
+            </div>
+            <button onclick="window.print()" style="padding: 10px 20px; background: #4f46e5; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 20px;">
+              Print QR Code
+            </button>
+            <script>
+              window.onload = function() {
+                window.print();
+              }
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+  }
 
   return (
     <div className="p-8 w-full min-w-fit overflow-x-auto">
-
       <Head>
         <title>{machine ? `Machine ${machine.machine_number}` : 'Machine Details'}</title>
       </Head>
@@ -279,15 +357,60 @@ function resetForm() {
                   </div>
                 </div>
               </div>
-              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                machine.status === 'operational' ? 'bg-green-100 text-green-800' :
-                machine.status === 'maintenance' ? 'bg-yellow-100 text-yellow-800' :
-                'bg-red-100 text-red-800'
-              }`}>
-                {MACHINE_STATUSES.find(s => s.value === machine.status)?.label}
-              </span>
+              <div className="flex flex-col items-end space-y-2">
+                <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
+                  machine.status === 'operational' ? 'bg-green-100 text-green-800' :
+                  machine.status === 'maintenance' ? 'bg-yellow-100 text-yellow-800' :
+                  'bg-red-100 text-red-800'
+                }`}>
+                  {MACHINE_STATUSES.find(s => s.value === machine.status)?.label}
+                </span>
+                <button
+                  onClick={() => setShowQRModal(true)}
+                  className="bg-purple-600 hover:bg-purple-700 text-white py-1 px-3 rounded text-sm transition duration-200"
+                >
+                  Show QR Code
+                </button>
+              </div>
             </div>
           </div>
+
+          {showQRModal && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
+                <h2 className="text-xl font-bold mb-4">Machine QR Code</h2>
+                <div className="flex justify-center mb-4">
+                  {typeof window !== 'undefined' && (
+                    <QRCode 
+                      value={`${window.location.origin}/machines/${machineId}`}
+                      size={256}
+                      level="H"
+                    />
+                  )}
+                </div>
+                <div className="flex justify-between">
+                  <button
+                    onClick={copyMachineUrl}
+                    className="bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded transition duration-200"
+                  >
+                    Copy URL
+                  </button>
+                  <button
+                    onClick={printQRCode}
+                    className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded transition duration-200"
+                  >
+                    Print QR Code
+                  </button>
+                  <button
+                    onClick={() => setShowQRModal(false)}
+                    className="bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded transition duration-200"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Machine Parts</h2>
 
