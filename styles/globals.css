@@ -52,6 +52,15 @@ body {
   transform: translateY(-2px);
 }
 
+.truncate-2-lines {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word; /* Helps break up very long words */
+}
+
 /* Table styles */
 .table-container {
   overflow-x: auto;
