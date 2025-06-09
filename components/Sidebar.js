@@ -91,9 +91,15 @@ export default function Sidebar() {
           href: '/tools/purchase-orders', 
           icon: 'receipt', 
           label: 'POs ApparelMagic',
-          show: hasPermission(currentUser, ['maintenance', 'manager'])
+          show: hasPermission(currentUser, [ 'manager'])
         },
         // Add more tools here as needed
+        {
+          href: '/tools/order-cards',
+          icon: 'web_stories',
+          label: 'Generador de cartas para Snapshot',
+          show: true
+        }
       ]
     },  
      { 
