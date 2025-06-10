@@ -279,10 +279,11 @@ const handleImageDrop = (itemId: string, e: React.DragEvent<HTMLElement>) => {
   const aggregatedItems = orderData ? aggregateItems(orderData.order_items) : [];
 
   return (
+    
     <div className="max-w-[1200px] mx-auto p-5">
-      {/* <Head>
-        <title>Order Card Generator</title>
-      </Head> */}
+        <Head>
+            <title>Generador Cartas</title>
+        </Head>
 
       <h1 className="text-2xl font-bold mb-5">Order Card Generator</h1>
 
@@ -471,7 +472,7 @@ const handleImageDrop = (itemId: string, e: React.DragEvent<HTMLElement>) => {
                 {/* Controls: Removed external Fabric and Product Image input fields */}
                 <button
                   onClick={() => exportCardAsImage(item.id)}
-                  className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 w-full"
+                  className="bg-blue-500 text-white px-3 py-1 rounded text-sm hover:bg-blue-600 w-[420px]"
                 >
                   Export Card
                 </button>
