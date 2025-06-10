@@ -313,15 +313,18 @@ export const generateExcelFile = async (workers: WorkerData[]): Promise<Blob> =>
         worker.inactiveHours.sun
       ]);
 
+
+
       addSummaryRow('Eficiencia', [
-        worker.efficiency.mon.toFixed(2), 
-        worker.efficiency.tue.toFixed(2),
-        worker.efficiency.wed.toFixed(2), 
-        worker.efficiency.thu.toFixed(2),
-        worker.efficiency.fri.toFixed(2), 
-        worker.efficiency.sat.toFixed(2),
-        worker.efficiency.sun.toFixed(2)
+        worker.efficiency.mon / 100, 
+        worker.efficiency.tue / 100,
+        worker.efficiency.wed / 100, 
+        worker.efficiency.thu / 100,
+        worker.efficiency.fri / 100, 
+        worker.efficiency.sat / 100,
+        worker.efficiency.sun / 100
       ]);
+
 
       addSummaryRow('Bono', [
         worker.bonus?.mon || 0, 
@@ -352,6 +355,19 @@ export const generateExcelFile = async (workers: WorkerData[]): Promise<Blob> =>
         });
       }
     });
+
+worksheet.eachRow((row) => {
+  const firstCellValue = row.getCell(1).value;
+
+  if (typeof firstCellValue === 'string' && firstCellValue.toLowerCase().includes('eficiencia')) {
+    row.eachCell((cell, colNumber) => {
+      if (colNumber > 5) { // Skip the first 4 empty cells and apply formatting to efficiency values
+        cell.numFmt = '0.00%';
+      }
+    });
+  }
+});
+
 
     const buffer = await workbook.xlsx.writeBuffer();
     return new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
