@@ -324,7 +324,10 @@ export default function OpenOrdersTable() {
           filteredRows = filteredRows.filter((row) => {
             if (searchField === "customer_name") {
               return row.customer_name.toLowerCase().includes(term) || row.client.toLowerCase().includes(term);
-            }
+            }else if (searchField === "cut") {
+                // Use exact match for the cut field
+                return row.cut.toLowerCase() === term;
+              }
             const value = row[searchField as keyof FinalRow];
             return value && value.toString().toLowerCase().includes(term);
           });
