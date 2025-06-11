@@ -611,7 +611,13 @@ function exportTableToCSV(tableId: string, filename: string) {
   rows.forEach((row) => {
     const rowData: string[] = [];
     row.querySelectorAll("th, td").forEach((cell) => {
-      let text = cell.textContent || "";
+      let text = "";
+        const selectElement = cell.querySelector("select");
+        if (selectElement) {
+          text = selectElement.value; // Get only the selected value, not all options
+        } else {
+          text = cell.textContent || "";
+        }
       text = text.replace(/"/g, '""');
       rowData.push(`"${text}"`);
     });
