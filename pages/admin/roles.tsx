@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { getCurrentUser, hasPermission } from '../../lib/auth';
 import supabase from '../../lib/supabaseClient';
+import { withAuth } from '../../components/withAuth';
 
 type Role = {
   id: number;
@@ -18,7 +19,7 @@ const ALL_PERMISSIONS = [
   'system_config'
 ];
 
-export default function RoleManagement() {
+ function RoleManagement() {
   const [isClient, setIsClient] = useState(false);
   const [roles, setRoles] = useState<Role[]>([]);
   const [newRole, setNewRole] = useState({
@@ -244,3 +245,6 @@ export default function RoleManagement() {
     </div>
   );
 }
+
+// Wrap and export the page, protecting it to only allow admin users
+export default withAuth(RoleManagement, 'admin');

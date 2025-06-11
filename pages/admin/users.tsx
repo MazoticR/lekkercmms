@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { getCurrentUser, hasPermission, hashPassword } from '../../lib/auth';
 import supabase from '../../lib/supabaseClient';
+import { withAuth } from '../../components/withAuth';
 
 type User = {
   id: string;
@@ -10,7 +11,7 @@ type User = {
   role: string;
 };
 
-export default function UserManagement() {
+ function UserManagement() {
   const [isClient, setIsClient] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<string[]>([]);
@@ -271,3 +272,6 @@ export default function UserManagement() {
     </div>
   );
 }
+
+// Wrap and export the page, protecting it to only allow admin users
+export default withAuth(UserManagement, 'admin');

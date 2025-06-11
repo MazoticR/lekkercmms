@@ -6,7 +6,7 @@ const SALT_ROUNDS = 10;
 
 type UserRole = 'admin' | 'manager' | 'user';
 
-interface AppUser {
+export interface AppUser {
   id: string;
   username: string;
   full_name: string;

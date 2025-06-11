@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import  supabase  from "../lib/supabaseClient"; // ensure this points to your Supabase client
 import Head from 'next/head';
+import { getCurrentUser, hasPermission } from '../lib/auth';
 
 //––––– API response interfaces –––––//
 interface OrderItem {
@@ -172,6 +173,10 @@ export default function OpenOrdersTable() {
   const [travCutDates, setTravCutDates] = useState<Record<string, string>>({});
   const [travAllDates, setTravAllDates] = useState<Record<string, string>>({});
   const [searchField, setSearchField] = useState<keyof FinalRow>("order_id"); // Ensures only valid keys are used
+
+  const currentUser = getCurrentUser();
+const canEditOverride = Boolean(currentUser && hasPermission(currentUser, ['manager', 'admin']));
+
 
 
 
@@ -492,38 +497,55 @@ export default function OpenOrdersTable() {
                       <td style={tdStyle}>{row.date_due}</td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>{row.cut}</td>
                       <td style={tdStyle}>
-                        <select value={lineNotes[key] || ""} onChange={(e) => handleLineNoteChange(key, e.target.value)}>
-                          <option value="">Select</option>
-                          <option value="New Order">New Order</option>
-                          <option value="Fabric">Fabric</option>
-                          <option value="Development">Development</option>
-                          <option value="Cut">Cut</option>
-                          <option value="Ready to receive">Ready to receive</option>
-                          <option value="Bundling">Bundling</option>
-                          <option value="Sewing">Sewing</option>
-                          <option value="Staging">Staging</option>
-                          <option value="Dye">Dye</option>
-                          <option value="Screenprinting">Screenprinting</option>
-                          <option value="Neckprint">Neckprint</option>
-                          <option value="Packaging">Packaging</option>
-                          <option value="Shipped">Shipped</option>
-                        </select>
+                        {canEditOverride ? (
+                          <select
+                            value={lineNotes[key] || ""}
+                            onChange={(e) => handleLineNoteChange(key, e.target.value)}
+                          >
+                            <option value="">Select</option>
+                            <option value="New Order">New Order</option>
+                            <option value="Fabric">Fabric</option>
+                            <option value="Development">Development</option>
+                            <option value="Cut">Cut</option>
+                            <option value="Ready to receive">Ready to receive</option>
+                            <option value="Bundling">Bundling</option>
+                            <option value="Sewing">Sewing</option>
+                            <option value="Staging">Staging</option>
+                            <option value="Dye">Dye</option>
+                            <option value="Screenprinting">Screenprinting</option>
+                            <option value="Neckprint">Neckprint</option>
+                            <option value="Packaging">Packaging</option>
+                            <option value="Shipped">Shipped</option>
+                          </select>
+                        ) : (
+                          <span>{lineNotes[key] || "Select"}</span>
+                        )}
                       </td>
+
                       <td style={tdStyle}>
-                        <input
-                          type="date"
-                          value={travCutDates[key] || ""}
-                          onChange={(e) => handleTravCutChange(key, e.target.value)}
-                          style={{ padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
-                        />
+                        {canEditOverride ? (
+                          <input
+                            type="date"
+                            value={travCutDates[key] || ""}
+                            onChange={(e) => handleTravCutChange(key, e.target.value)}
+                            style={{ padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
+                          />
+                        ) : (
+                          <span>{travCutDates[key] || ""}</span>
+                        )}
                       </td>
+
                       <td style={tdStyle}>
-                        <input
-                          type="date"
-                          value={travAllDates[key] || ""}
-                          onChange={(e) => handleTravAllChange(key, e.target.value)}
-                          style={{ padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
-                        />
+                        {canEditOverride ? (
+                          <input
+                            type="date"
+                            value={travAllDates[key] || ""}
+                            onChange={(e) => handleTravAllChange(key, e.target.value)}
+                            style={{ padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
+                          />
+                        ) : (
+                          <span>{travAllDates[key] || ""}</span>
+                        )}
                       </td>
                       {standardSizesColumns.map((size) => (
                         <td key={size} style={{ ...tdStyle, textAlign: "right" }}>
