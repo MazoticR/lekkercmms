@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import  supabase  from "../lib/supabaseClient"; // ensure this points to your Supabase client
 
 //––––– API response interfaces –––––//
 interface OrderItem {
@@ -48,22 +49,57 @@ interface FinalRow extends FlattenedRow {
   breakdown: "Standard" | "Other";
 }
 
-//––––– STYLE OBJECTS –––––//
+//––––– STYLE OBJECTS (Prettier styling) –––––//
 const containerStyle: React.CSSProperties = {
-  padding: "20px",
-  maxWidth: "90%",
+  backgroundColor: "#fff",
+  borderRadius: "12px",
+  boxShadow: "0 4px 8px rgba(0, 0, 0, 0.1)",
+  padding: "30px",
+  width: "95%",     // wider layout
+  maxWidth: "none",
   margin: "20px auto",
-  backgroundColor: "#f9f9f9",
-  borderRadius: "8px",
-  boxShadow: "0 2px 6px rgba(0,0,0,0.1)",
   fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+};
+
+const headerStyle: React.CSSProperties = {
+  textAlign: "center",
+  marginBottom: "30px",
+  fontSize: "28px",
+  color: "#333",
+};
+
+const controlsStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  marginBottom: "20px",
+};
+
+const toggleStyle: React.CSSProperties = {
+  display: "flex",
+  gap: "15px",
+};
+
+const inputStyle: React.CSSProperties = {
+  padding: "8px",
+  borderRadius: "6px",
+  border: "1px solid #ccc",
+  width: "250px",
+};
+
+const buttonStyle: React.CSSProperties = {
+  backgroundColor: "#4CAF50",
+  color: "#fff",
+  border: "none",
+  padding: "10px 15px",
+  borderRadius: "6px",
+  cursor: "pointer",
+  marginBottom: "10px",
 };
 
 const tableContainerStyle: React.CSSProperties = {
   overflowX: "auto",
   marginBottom: "30px",
-  borderRadius: "8px",
-  boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
 };
 
 const tableStyle: React.CSSProperties = {
@@ -73,8 +109,8 @@ const tableStyle: React.CSSProperties = {
 
 const thStyle: React.CSSProperties = {
   padding: "12px 15px",
-  backgroundColor: "#4CAF50",
-  color: "white",
+  background: "linear-gradient(90deg, #4CAF50, #45A049)",
+  color: "#fff",
   borderBottom: "2px solid #ddd",
   textAlign: "left",
 };
@@ -85,94 +121,55 @@ const tdStyle: React.CSSProperties = {
   textAlign: "left",
 };
 
-const buttonStyle: React.CSSProperties = {
-  backgroundColor: "#4CAF50",
-  color: "white",
-  border: "none",
-  padding: "10px 15px",
-  borderRadius: "4px",
-  cursor: "pointer",
-  marginBottom: "10px",
+//––––– Helper to generate a composite key –––––//
+// We'll use order_id, style_number, cut and color to uniquely identify an order row.
+const generateOrderKey = (row: FinalRow): string =>
+  `${row.order_id}-${row.style_number}-${row.cut}-${row.color}`;
+
+//––––– Canonical Sizes Setup –––––//
+const standardSizeOrder = ["XXS", "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL"];
+const standardMapping: Record<string, number> = {
+  "XXS": 0,
+  "XS": 1,
+  "S": 2,
+  "SM": 2,      // treat SM as S
+  "M": 3,
+  "L": 4,
+  "XL": 5,
+  "2XL": 6,
+  "XXL": 6,     // treat XXL as 2XL
+  "3XL": 7,
+  "XXXL": 7,    // treat XXXL as 3XL
+  "4XL": 8,
+  "XXXXL": 8,   // treat XXXXL as 4XL
 };
 
-const inputStyle: React.CSSProperties = {
-  padding: "8px",
-  borderRadius: "4px",
-  border: "1px solid #ccc",
-  marginRight: "15px",
-  width: "250px",
+const getCanonicalStandard = (size: string): string => {
+  if (standardMapping[size] !== undefined) {
+    return standardSizeOrder[standardMapping[size]];
+  }
+  return size;
 };
 
-//––––– UTILITY FUNCTION: EXPORT TABLE TO CSV –––––//
-function exportTableToCSV(tableId: string, filename: string) {
-  const table = document.getElementById(tableId);
-  if (!table) return;
-  let csv = "";
-  const rows = table.querySelectorAll("tr");
-  rows.forEach((row) => {
-    const rowData: string[] = [];
-    row.querySelectorAll("th, td").forEach((cell) => {
-      let text = cell.textContent || "";
-      text = text.replace(/"/g, '""');
-      rowData.push(`"${text}"`);
-    });
-    csv += rowData.join(",") + "\n";
-  });
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const link = document.createElement("a");
-  const url = URL.createObjectURL(blob);
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
+const otherSizeOrder = ["XS/S", "S/M", "M/L", "L/XL"];
 
 //––––– COMPONENT –––––//
 export default function OpenOrdersTable() {
   const [rows, setRows] = useState<FinalRow[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>("");
-  // Default Secura division ("2"); Development is now "4".
+  // Default Secura is Division "2"; Development uses "4".
   const [selectedDivision, setSelectedDivision] = useState<string>("2");
   const [searchTerm, setSearchTerm] = useState<string>("");
 
-  // States for editable fields.
+  // States for the persisted override fields.
   const [lineNotes, setLineNotes] = useState<Record<string, string>>({});
   const [travCutDates, setTravCutDates] = useState<Record<string, string>>({});
   const [travAllDates, setTravAllDates] = useState<Record<string, string>>({});
 
-  // Hard-coded token.
   const API_TOKEN = "6002f37a06cc09759259a7c5eabff471";
 
-  // Define the canonical order and mapping for standard sizes.
-  const standardSizeOrder = ["XXS", "XS", "S", "M", "L", "XL", "2XL", "3XL", "4XL"];
-  // For any reported standard size (including variants), use this mapping:
-  const standardMapping: Record<string, number> = {
-    "XXS": 0,
-    "XS": 1,
-    "S": 2,
-    "SM": 2,      // treat SM as S
-    "M": 3,
-    "L": 4,
-    "XL": 5,
-    "2XL": 6,
-    "XXL": 6,     // treat XXL as 2XL
-    "3XL": 7,
-    "XXXL": 7,    // treat XXXL as 3XL
-    "4XL": 8,
-    "XXXXL": 8,   // treat XXXXL as 4XL
-  };
-
-  const getCanonicalStandard = (size: string): string => {
-    if (standardMapping[size] !== undefined) {
-      return standardSizeOrder[standardMapping[size]];
-    }
-    return size;
-  };
-
-  // Fixed order for the Other sizes breakdown.
-  const otherSizeOrder = ["XS/S", "S/M", "M/L", "L/XL"];
-
+  //––––– FETCH ORDERS & AGGREGATE DATA –––––//
   useEffect(() => {
     async function fetchOrders() {
       setLoading(true);
@@ -182,7 +179,7 @@ export default function OpenOrdersTable() {
         const params = new URLSearchParams();
         params.append("token", API_TOKEN);
         params.append("time", time.toString());
-        // Only fetch orders with qty_open > 0.
+        // Only orders with qty_open > 0.
         params.append("parameters[0][field]", "qty_open");
         params.append("parameters[0][operator]", ">");
         params.append("parameters[0][value]", "0");
@@ -230,14 +227,12 @@ export default function OpenOrdersTable() {
           flattenedRows.push(...groups.values());
         });
 
-        // Filter out groups that contain the size "SERVICE".
+        // Remove groups that contain a "SERVICE" size.
         flattenedRows = flattenedRows.filter(
           (row) => !Object.keys(row.sizeDetails).some((size) => size === "SERVICE")
         );
 
-        // Split each aggregated row into two rows:
-        // • Standard: sizes that can be mapped into our canonical standard set.
-        // • Other: sizes not in our mapping.
+        // Split rows into Standard and Other based on our mapping.
         const finalRows: FinalRow[] = [];
         flattenedRows.forEach((row) => {
           const standardSizes: Record<string, number> = {};
@@ -270,7 +265,6 @@ export default function OpenOrdersTable() {
             });
           }
         });
-
         setRows(finalRows);
       } catch (e) {
         console.error("Error fetching orders:", e);
@@ -282,10 +276,39 @@ export default function OpenOrdersTable() {
     fetchOrders();
   }, [API_TOKEN]);
 
-  // Filter by selected division.
-  let filteredRows = rows.filter((row) => row.division_id === selectedDivision);
+  //––––– FETCH SUPABASE OVERRIDES –––––//
+  // Once our rows have loaded, we can fetch persisted override values from Supabase.
+  useEffect(() => {
+    async function fetchOverrides() {
+      if (rows.length === 0) return;
+      // Build an array of composite keys for all visible rows.
+      const keys = rows.map((row) => generateOrderKey(row));
+      const { data, error } = await supabase
+        .from("order_field_overrides")
+        .select("*")
+        .in("order_key", keys);
+      if (error) {
+        console.error("Error fetching overrides:", error);
+      } else if (data) {
+        // data is an array of records; update states accordingly.
+        const ln: Record<string, string> = {};
+        const tc: Record<string, string> = {};
+        const ta: Record<string, string> = {};
+        data.forEach((record: any) => {
+          ln[record.order_key] = record.linenote || "";
+          tc[record.order_key] = record.trav_cut || "";
+          ta[record.order_key] = record.trav_all || "";
+        });
+        setLineNotes(ln);
+        setTravCutDates(tc);
+        setTravAllDates(ta);
+      }
+    }
+    fetchOverrides();
+  }, [rows]);
 
-  // Apply search filter.
+  //––––– FILTERING –––––//
+  let filteredRows = rows.filter((row) => row.division_id === selectedDivision);
   if (searchTerm.trim() !== "") {
     const term = searchTerm.trim().toLowerCase();
     filteredRows = filteredRows.filter(
@@ -296,33 +319,52 @@ export default function OpenOrdersTable() {
         row.style_number.toLowerCase().includes(term)
     );
   }
-
-  // Split filtered rows into Standard and Other.
   const standardRows = filteredRows.filter((r) => r.breakdown === "Standard");
   const otherRows = filteredRows.filter((r) => r.breakdown === "Other");
 
-  // For the Standard table, use the fixed canonical order.
+  // Use the fixed orders for columns.
   const standardSizesColumns = standardSizeOrder.filter((size) =>
     standardRows.some((row) => row.sizeDetails[size] !== undefined)
   );
-  // For the Other table, use our fixed order.
   const otherSizesColumns = otherSizeOrder.filter((size) =>
     otherRows.some((row) => row.sizeDetails[size] !== undefined)
   );
 
-  // Generate a unique key for each row.
   const rowKey = (row: FinalRow, idx: number) =>
     `${row.order_id}-${row.style_number}-${row.cut}-${row.breakdown}-${idx}`;
 
-  // Handlers for editable fields.
-  const handleLineNoteChange = (key: string, value: string) =>
-    setLineNotes((prev) => ({ ...prev, [key]: value }));
-  const handleTravCutChange = (key: string, value: string) =>
-    setTravCutDates((prev) => ({ ...prev, [key]: value }));
-  const handleTravAllChange = (key: string, value: string) =>
-    setTravAllDates((prev) => ({ ...prev, [key]: value }));
+  //––––– SUPABASE UPDATING FUNCTIONS –––––//
+  const updateOverride = async (
+    key: string,
+    newData: { linenote?: string; trav_cut?: string; trav_all?: string }
+  ) => {
+    const { error } = await supabase
+      .from("order_field_overrides")
+      .upsert({
+        order_key: key,
+        ...newData,
+      });
+    if (error) {
+      console.error("Error updating override:", error);
+    }
+  };
 
-  // Render the fixed table header.
+  const handleLineNoteChange = (key: string, value: string) => {
+    setLineNotes((prev) => ({ ...prev, [key]: value }));
+    updateOverride(key, { linenote: value });
+  };
+
+  const handleTravCutChange = (key: string, value: string) => {
+    setTravCutDates((prev) => ({ ...prev, [key]: value }));
+    updateOverride(key, { trav_cut: value });
+  };
+
+  const handleTravAllChange = (key: string, value: string) => {
+    setTravAllDates((prev) => ({ ...prev, [key]: value }));
+    updateOverride(key, { trav_all: value });
+  };
+
+  //––––– RENDER TABLE HEADER –––––//
   const renderTableHeader = (sizeColumns: string[]) => (
     <tr>
       <th style={thStyle}>Account</th>
@@ -355,10 +397,10 @@ export default function OpenOrdersTable() {
 
   return (
     <div style={containerStyle}>
-      {/* Division Toggle and Search Bar */}
-      <div style={{ marginBottom: "20px", display: "flex", alignItems: "center" }}>
-        <div style={{ marginRight: "25px" }}>
-          <label style={{ marginRight: "15px" }}>
+      {/* Division Toggle + Search */}
+      <div style={controlsStyle}>
+        <div style={toggleStyle}>
+          <label>
             <input
               type="radio"
               value="2"
@@ -387,14 +429,12 @@ export default function OpenOrdersTable() {
           />
         </div>
       </div>
-      <h1 style={{ textAlign: "center", marginBottom: "30px" }}>
-        Open Orders Details (Division #{selectedDivision})
-      </h1>
+      <h1 style={headerStyle}>Open Orders Details (Division #{selectedDivision})</h1>
 
       {/* Standard Sizes Breakdown */}
       {standardRows.length > 0 && (
         <>
-          <h2 style={{ marginBottom: "10px" }}>Standard Sizes Breakdown</h2>
+          <h2 style={{ marginBottom: "10px", color: "#333" }}>Standard Sizes Breakdown</h2>
           <button style={buttonStyle} onClick={() => exportTableToCSV("standardTable", "Standard_Sizes_Breakdown.csv")}>
             Export to Excel
           </button>
@@ -403,9 +443,9 @@ export default function OpenOrdersTable() {
               <thead>{renderTableHeader(standardSizesColumns)}</thead>
               <tbody>
                 {standardRows.map((row, idx) => {
-                  const key = rowKey(row, idx);
+                  const key = generateOrderKey(row);
                   return (
-                    <tr key={key} style={{ backgroundColor: idx % 2 === 0 ? "#ffffff" : "#f1f1f1" }}>
+                    <tr key={rowKey(row, idx)} style={{ backgroundColor: idx % 2 === 0 ? "#ffffff" : "#f9f9f9" }}>
                       <td style={tdStyle}>{row.account_number || "N/A"}</td>
                       <td style={tdStyle}>{row.customer_name}</td>
                       <td style={tdStyle}>{row.order_id}</td>
@@ -417,10 +457,7 @@ export default function OpenOrdersTable() {
                       <td style={tdStyle}>{row.date_due}</td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>{row.cut}</td>
                       <td style={tdStyle}>
-                        <select
-                          value={lineNotes[key] || ""}
-                          onChange={(e) => handleLineNoteChange(key, e.target.value)}
-                        >
+                        <select value={lineNotes[key] || ""} onChange={(e) => handleLineNoteChange(key, e.target.value)}>
                           <option value="">Select</option>
                           <option value="Option 1">Option 1</option>
                           <option value="Option 2">Option 2</option>
@@ -448,12 +485,8 @@ export default function OpenOrdersTable() {
                           {row.sizeDetails[size] !== undefined ? row.sizeDetails[size] : ""}
                         </td>
                       ))}
-                      <td style={{ ...tdStyle, textAlign: "right" }}>
-                        {"$" + row.unit_price}
-                      </td>
-                      <td style={{ ...tdStyle, textAlign: "right" }}>
-                        {"$" + row.sumAmount.toFixed(2)}
-                      </td>
+                      <td style={{ ...tdStyle, textAlign: "right" }}>{"$" + row.unit_price}</td>
+                      <td style={{ ...tdStyle, textAlign: "right" }}>{"$" + row.sumAmount.toFixed(2)}</td>
                     </tr>
                   );
                 })}
@@ -466,7 +499,7 @@ export default function OpenOrdersTable() {
       {/* Other Sizes Breakdown */}
       {otherRows.length > 0 && (
         <>
-          <h2 style={{ marginBottom: "10px" }}>Other Sizes Breakdown</h2>
+          <h2 style={{ marginBottom: "10px", color: "#333" }}>Other Sizes Breakdown</h2>
           <button style={buttonStyle} onClick={() => exportTableToCSV("otherTable", "Other_Sizes_Breakdown.csv")}>
             Export to Excel
           </button>
@@ -475,9 +508,9 @@ export default function OpenOrdersTable() {
               <thead>{renderTableHeader(otherSizesColumns)}</thead>
               <tbody>
                 {otherRows.map((row, idx) => {
-                  const key = rowKey(row, idx);
+                  const key = generateOrderKey(row);
                   return (
-                    <tr key={key} style={{ backgroundColor: idx % 2 === 0 ? "#ffffff" : "#f1f1f1" }}>
+                    <tr key={rowKey(row, idx)} style={{ backgroundColor: idx % 2 === 0 ? "#ffffff" : "#f9f9f9" }}>
                       <td style={tdStyle}>{row.account_number || "N/A"}</td>
                       <td style={tdStyle}>{row.customer_name}</td>
                       <td style={tdStyle}>{row.order_id}</td>
@@ -489,10 +522,7 @@ export default function OpenOrdersTable() {
                       <td style={tdStyle}>{row.date_due}</td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>{row.cut}</td>
                       <td style={tdStyle}>
-                        <select
-                          value={lineNotes[key] || ""}
-                          onChange={(e) => handleLineNoteChange(key, e.target.value)}
-                        >
+                        <select value={lineNotes[key] || ""} onChange={(e) => handleLineNoteChange(key, e.target.value)}>
                           <option value="">Select</option>
                           <option value="Option 1">Option 1</option>
                           <option value="Option 2">Option 2</option>
@@ -520,12 +550,8 @@ export default function OpenOrdersTable() {
                           {row.sizeDetails[size] !== undefined ? row.sizeDetails[size] : ""}
                         </td>
                       ))}
-                      <td style={{ ...tdStyle, textAlign: "right" }}>
-                        {"$" + row.unit_price}
-                      </td>
-                      <td style={{ ...tdStyle, textAlign: "right" }}>
-                        {"$" + row.sumAmount.toFixed(2)}
-                      </td>
+                      <td style={{ ...tdStyle, textAlign: "right" }}>{"$" + row.unit_price}</td>
+                      <td style={{ ...tdStyle, textAlign: "right" }}>{"$" + row.sumAmount.toFixed(2)}</td>
                     </tr>
                   );
                 })}
@@ -538,8 +564,8 @@ export default function OpenOrdersTable() {
   );
 }
 
-// Utility function to export a table as CSV.
-/*function exportTableToCSV(tableId: string, filename: string) {
+//––––– Utility function to export a table as CSV –––––//
+function exportTableToCSV(tableId: string, filename: string) {
   const table = document.getElementById(tableId);
   if (!table) return;
   let csv = "";
@@ -560,4 +586,4 @@ export default function OpenOrdersTable() {
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
-}*/
+}

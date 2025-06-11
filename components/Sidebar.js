@@ -81,6 +81,12 @@ export default function Sidebar() {
       icon: 'timer', 
       label: 'Efficiencies',
       show: true // Requires at least user role
+    },    
+    { 
+      href: '/open-orders', 
+      icon: 'receipt_long', 
+      label: 'Open Orders',
+      show: true // Requires at least user role
     },
     { 
       label: 'Tools', 
