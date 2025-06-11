@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import  supabase  from "../lib/supabaseClient"; // ensure this points to your Supabase client
-import Head from 'next/Head';
+import Head from 'next/head';
 
 //––––– API response interfaces –––––//
 interface OrderItem {
