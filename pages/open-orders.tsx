@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import  supabase  from "../lib/supabaseClient"; // ensure this points to your Supabase client
+import Head from 'next/Head';
 
 //––––– API response interfaces –––––//
 interface OrderItem {
@@ -409,6 +410,11 @@ export default function OpenOrdersTable() {
 
   return (
     <div style={containerStyle}>
+
+      <Head>
+      <title>Open Orders</title>
+
+      </Head>
       {/* Division Toggle + Search */}
       <div style={controlsStyle}>
         <div style={toggleStyle}>
