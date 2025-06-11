@@ -85,7 +85,7 @@ export default function Sidebar() {
     { 
       label: 'Tools', 
       icon: 'build',
-      show: hasPermission(currentUser, ['maintenance', 'manager']), // Requires manager or higher
+      show: true, // Requires manager or higher
       items: [
         { 
           href: '/tools/purchase-orders', 
