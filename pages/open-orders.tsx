@@ -24,6 +24,8 @@ interface Order {
   division_id: string;
   total_amount: string;
   order_items: OrderItem[];
+  client: string;
+  libertad_po: string;
 }
 
 //––––– Intermediate aggregated row –––––//
@@ -42,6 +44,8 @@ interface FlattenedRow {
   total_qty: number;
   sizeDetails: Record<string, number>;
   sumAmount: number; // Sum of amounts for this group
+  client: string;
+  libertad_po: string;
 }
 
 //––––– Final row after splitting into Standard vs. Other –––––//
@@ -166,6 +170,9 @@ export default function OpenOrdersTable() {
   const [lineNotes, setLineNotes] = useState<Record<string, string>>({});
   const [travCutDates, setTravCutDates] = useState<Record<string, string>>({});
   const [travAllDates, setTravAllDates] = useState<Record<string, string>>({});
+  const [searchField, setSearchField] = useState<keyof FinalRow>("order_id"); // Ensures only valid keys are used
+
+
 
   const API_TOKEN = "6002f37a06cc09759259a7c5eabff471";
 
@@ -198,7 +205,7 @@ export default function OpenOrdersTable() {
           const groups = new Map<string, FlattenedRow>();
           order.order_items.forEach((item) => {
             const normalizedSize = item.size.trim().toUpperCase();
-            const key = `${order.order_id}|${item.style_number}|${item.project_id || "N/A"}`;
+            const key = `${order.order_id}|${item.style_number}|${item.project_id || "N/A"}|${item.attr_2}`;
             if (!groups.has(key)) {
               groups.set(key, {
                 order_id: order.order_id,
@@ -215,6 +222,8 @@ export default function OpenOrdersTable() {
                 total_qty: 0,
                 sizeDetails: {},
                 sumAmount: 0,
+                client: order.client || "N/A", // Capture Client
+                libertad_po: order.libertad_po || "N/A", // Capture Libertad PO
               });
             }
             const row = groups.get(key)!;
@@ -309,16 +318,17 @@ export default function OpenOrdersTable() {
 
   //––––– FILTERING –––––//
   let filteredRows = rows.filter((row) => row.division_id === selectedDivision);
-  if (searchTerm.trim() !== "") {
-    const term = searchTerm.trim().toLowerCase();
-    filteredRows = filteredRows.filter(
-      (row) =>
-        row.account_number.toLowerCase().includes(term) ||
-        row.order_id.toLowerCase().includes(term) ||
-        row.customer_name.toLowerCase().includes(term) ||
-        row.style_number.toLowerCase().includes(term)
-    );
-  }
+        if (searchTerm.trim() !== "") {
+          const term = searchTerm.trim().toLowerCase();
+          filteredRows = filteredRows.filter((row) => {
+            if (searchField === "customer_name") {
+              return row.customer_name.toLowerCase().includes(term) || row.client.toLowerCase().includes(term);
+            }
+            const value = row[searchField as keyof FinalRow];
+            return value && value.toString().toLowerCase().includes(term);
+          });
+        }
+
   const standardRows = filteredRows.filter((r) => r.breakdown === "Standard");
   const otherRows = filteredRows.filter((r) => r.breakdown === "Other");
 
@@ -369,8 +379,10 @@ export default function OpenOrdersTable() {
     <tr>
       <th style={thStyle}>Account</th>
       <th style={thStyle}>Customer Name</th>
-      <th style={thStyle}>Order</th>
       <th style={thStyle}>CustomerPO</th>
+      <th style={thStyle}>Client</th>
+      <th style={thStyle}>Libertad PO</th>
+      <th style={thStyle}>Order</th>
       <th style={thStyle}>Style</th>
       <th style={thStyle}>Description</th>
       <th style={thStyle}>TotalQty</th>
@@ -419,15 +431,27 @@ export default function OpenOrdersTable() {
             Development (Division #4)
           </label>
         </div>
-        <div>
-          <input
-            type="text"
-            placeholder="Search orders..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={inputStyle}
-          />
-        </div>
+            <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+            <select 
+                value={searchField} 
+                onChange={(e) => setSearchField(e.target.value as keyof FinalRow)}
+                style={{ padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
+            >
+                <option value="order_id">Order ID</option>
+                <option value="customer_name">Customer Name</option>
+                <option value="style_number">Style</option>
+                <option value="color">Color</option>
+                <option value="cut">Cut</option>
+            </select>
+
+            <input
+                type="text"
+                placeholder={`Search by ${searchField.replace("_", " ")}`}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ccc", width: "250px" }}
+            />
+            </div>
       </div>
       <h1 style={headerStyle}>Open Orders Details (Division #{selectedDivision})</h1>
 
@@ -448,8 +472,10 @@ export default function OpenOrdersTable() {
                     <tr key={rowKey(row, idx)} style={{ backgroundColor: idx % 2 === 0 ? "#ffffff" : "#f9f9f9" }}>
                       <td style={tdStyle}>{row.account_number || "N/A"}</td>
                       <td style={tdStyle}>{row.customer_name}</td>
-                      <td style={tdStyle}>{row.order_id}</td>
                       <td style={tdStyle}>{row.customer_po || "N/A"}</td>
+                      <td style={tdStyle}>{row.client || "N/A"}</td>
+                      <td style={tdStyle}>{row.libertad_po || "N/A"}</td>
+                      <td style={tdStyle}>{row.order_id}</td>              
                       <td style={tdStyle}>{row.style_number}</td>
                       <td style={tdStyle}>{row.description}</td>
                       <td style={{ ...tdStyle, textAlign: "right" }}>{row.total_qty}</td>
@@ -459,9 +485,19 @@ export default function OpenOrdersTable() {
                       <td style={tdStyle}>
                         <select value={lineNotes[key] || ""} onChange={(e) => handleLineNoteChange(key, e.target.value)}>
                           <option value="">Select</option>
-                          <option value="Option 1">Option 1</option>
-                          <option value="Option 2">Option 2</option>
-                          <option value="Option 3">Option 3</option>
+                          <option value="New Order">New Order</option>
+                          <option value="Fabric">Fabric</option>
+                          <option value="Development">Development</option>
+                          <option value="Cut">Cut</option>
+                          <option value="Ready to receive">Ready to receive</option>
+                          <option value="Bundling">Bundling</option>
+                          <option value="Sewing">Sewing</option>
+                          <option value="Staging">Staging</option>
+                          <option value="Dye">Dye</option>
+                          <option value="Screenprinting">Screenprinting</option>
+                          <option value="Neckprint">Neckprint</option>
+                          <option value="Packaging">Packaging</option>
+                          <option value="Shipped">Shipped</option>
                         </select>
                       </td>
                       <td style={tdStyle}>
@@ -513,8 +549,10 @@ export default function OpenOrdersTable() {
                     <tr key={rowKey(row, idx)} style={{ backgroundColor: idx % 2 === 0 ? "#ffffff" : "#f9f9f9" }}>
                       <td style={tdStyle}>{row.account_number || "N/A"}</td>
                       <td style={tdStyle}>{row.customer_name}</td>
-                      <td style={tdStyle}>{row.order_id}</td>
                       <td style={tdStyle}>{row.customer_po || "N/A"}</td>
+                      <td style={tdStyle}>{row.client || "N/A"}</td>
+                      <td style={tdStyle}>{row.libertad_po || "N/A"}</td>
+                      <td style={tdStyle}>{row.order_id}</td> 
                       <td style={tdStyle}>{row.style_number}</td>
                       <td style={tdStyle}>{row.description}</td>
                       <td style={{ ...tdStyle, textAlign: "right" }}>{row.total_qty}</td>
