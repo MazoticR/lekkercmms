@@ -57,6 +57,13 @@ const TransportDetailPage = () => {
   const [searchResults, setSearchResults] = useState<InventoryPart[]>([]);
   const [editingPart, setEditingPart] = useState<TransportPart | null>(null);
   const [trackReplacement, setTrackReplacement] = useState(true);
+  const [customDescription, setCustomDescription] = useState('');
+  const [editingCell, setEditingCell] = useState<{ id: number; field: string; value: string } | null>(null);
+  const [sortColumn, setSortColumn] = useState<string>('last_replaced_date');
+  const [sortAscending, setSortAscending] = useState<boolean>(false); // false = descending
+  const [tableSearchTerm, setTableSearchTerm] = useState('');
+
+
   
   useEffect(() => {
     if (transportId) {
@@ -65,6 +72,12 @@ const TransportDetailPage = () => {
       fetchInventoryParts();
     }
   }, [transportId]);
+
+  useEffect(() => {
+  if (transportId) {
+    fetchParts();
+  }
+}, [sortColumn, sortAscending, transportId]);
 
   useEffect(() => {
     if (searchTerm.trim() === '') {
@@ -99,18 +112,20 @@ const TransportDetailPage = () => {
     }
   }
 
-  async function fetchParts() {
-    const { data, error } = await supabase
-      .from('transport_parts')
-      .select('*')
-      .eq('transport_id', transportId)
-      .order('last_updated', { ascending: false });
-    if (error) {
-      console.error('Error fetching transport parts:', error);
-    } else {
-      setParts(data || []);
-    }
-  }
+        async function fetchParts() {
+          if (!transportId) return;
+          const { data, error } = await supabase
+            .from('transport_parts')
+            .select('*')
+            .eq('transport_id', transportId)
+            .order(sortColumn, { ascending: sortAscending });
+          if (error) {
+            console.error('Error fetching transport parts:', error);
+          } else {
+            setParts(data || []);
+          }
+        }
+
 
   async function fetchInventoryParts() {
     const { data, error } = await supabase
@@ -158,9 +173,11 @@ async function addOrUpdatePart(e: FormEvent) {
   if (editingPart) {
     // Update existing part
     const partData = {
-      last_replaced_date: lastReplacedDate ? lastReplacedDate : null,
+      last_replaced_date: lastReplacedDate || null,
       notes: notes || null,
       cost: cost !== null ? cost : selectedPart.cost || null,
+      // Use customDescription if provided; if empty, retain the existing description.
+      code: customDescription ? customDescription : editingPart.code,
       last_updated: new Date().toISOString()
     };
 
@@ -179,16 +196,17 @@ async function addOrUpdatePart(e: FormEvent) {
       toast.success('Part updated successfully');
     }
   } else {
-    // Always create new entry for new parts/replacements
+    // Create a new part (replacement)
     const existingParts = parts.filter(part => part.inventory_part_id === selectedInventoryPart);
-    const latestExistingPart = existingParts[0]; // Get most recent
+    const latestExistingPart = existingParts[0];
 
     const newPart = {
       transport_id: transportId,
       part_name: selectedPart.part_number,
-      code: selectedPart.description || '',
+      // Use the custom description if provided; otherwise, use the inventory part's description.
+      code: customDescription ? customDescription : (selectedPart.description || ''),
       inventory_part_id: selectedInventoryPart,
-      last_replaced_date: lastReplacedDate ? lastReplacedDate : null,
+      last_replaced_date: lastReplacedDate || null,
       notes: notes || null,
       cost: cost !== null ? cost : selectedPart.cost || null,
       times_replaced: trackReplacement && latestExistingPart 
@@ -209,7 +227,7 @@ async function addOrUpdatePart(e: FormEvent) {
       await updateTransportTimestamp();
       fetchParts();
       
-      // Decrement inventory if needed
+      // Optionally, trigger inventory decrement via RPC
       await supabase.rpc('decrement_inventory', {
         part_id: selectedInventoryPart
       });
@@ -233,14 +251,73 @@ async function addOrUpdatePart(e: FormEvent) {
     resetForm();
   }
 
-  function resetForm() {
-    setEditingPart(null);
-    setSelectedInventoryPart(null);
-    setLastReplacedDate('');
-    setNotes('');
-    setCost(null);
-    setSearchTerm('');
+function resetForm() {
+  setEditingPart(null);
+  setSelectedInventoryPart(null);
+  setLastReplacedDate('');
+  setNotes('');
+  setCost(null);
+  setSearchTerm('');
+  setCustomDescription('');  // Clear the override field
+}
+
+async function handleCellUpdate(
+  partId: number,
+  field: string,
+  newValue: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('transport_parts')
+    .update({ 
+      [field]: newValue, 
+      last_updated: new Date().toISOString() 
+    })
+    .eq('id', partId);
+
+  if (error) {
+    console.error(`Error updating ${field}:`, error);
+    toast.error('Failed to update');
+  } else {
+    fetchParts(); // Refresh the parts list after update
+    toast.success('Update saved');
   }
+  setEditingCell(null);
+}
+
+const filteredParts = parts.filter((part) => {
+  const term = tableSearchTerm.toLowerCase();
+  return (
+    part.part_name.toLowerCase().includes(term) ||
+    part.code.toLowerCase().includes(term) ||
+    (part.notes && part.notes.toLowerCase().includes(term))
+  );
+});
+
+
+
+function formatDate(dateString: string): string {
+  if (!dateString) return 'N/A';
+  const [year, month, day] = dateString.split('-');
+  return `${day}/${month}/${year.slice(2)}`;
+}
+
+function renderSortIcon(column: string) {
+  if (sortColumn !== column) return null;
+  return sortAscending ? ' ↑' : ' ↓';
+}
+
+function handleSort(column: string) {
+  if (sortColumn === column) {
+    // Toggle sort direction if already sorted by this column.
+    setSortAscending(!sortAscending);
+  } else {
+    // Change to a new sort column; default to ascending or descending as desired.
+    setSortColumn(column);
+    // Optionally, you can set sortAscending to true or false by default for new columns.
+    setSortAscending(true);
+  }
+}
+
 
   return (
     <div className="p-8 w-full min-w-fit overflow-x-auto">
@@ -248,7 +325,7 @@ async function addOrUpdatePart(e: FormEvent) {
         <title>{transport ? `Transport ${transport.transport_number}` : 'Transport Details'}</title>
       </Head>
       <button 
-        onClick={() => router.push('/transports')} 
+        onClick={() => router.push('/transport')} 
         className="flex items-center text-purple-600 hover:text-purple-800 mb-6 transition duration-200"
       >
         <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -328,152 +405,331 @@ async function addOrUpdatePart(e: FormEvent) {
 
           <h2 className="text-xl font-semibold text-gray-800 mb-4">Transport Parts</h2>
 
-          <form onSubmit={addOrUpdatePart} className="bg-white p-6 rounded-lg shadow-md mb-8">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search by part number or description"
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                    setSelectedInventoryPart(null);
-                  }}
-                  className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-                {searchResults.length > 0 && (
-                  <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg">
-                    {searchResults.map((part) => (
-                      <div
-                        key={part.id}
-                        className={`p-2 hover:bg-gray-100 cursor-pointer ${
-                          selectedInventoryPart === part.id ? 'bg-purple-100' : ''
-                        }`}
-                        onClick={() => {
-                          setSelectedInventoryPart(part.id);
-                          setSearchTerm(`${part.part_number} - ${part.description || ''}`);
-                          setCost(part.cost);
-                          setSearchResults([]);
-                        }}
-                      >
-                        <div className="font-medium">{part.part_number}</div>
-                        <div className="text-sm text-gray-600">{part.description}</div>
-                        <div className="text-sm text-green-600">
-                          {part.cost ? `$${part.cost.toFixed(2)}` : 'No price set'}
-                        </div>
+              <form onSubmit={addOrUpdatePart} className="bg-white p-6 rounded-lg shadow-md mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                  {/* Your existing form fields: search, last replaced date, cost, notes, etc. */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search by part number or description"
+                      value={searchTerm}
+                      onChange={(e) => {
+                        setSearchTerm(e.target.value);
+                        setSelectedInventoryPart(null);
+                      }}
+                      className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                    {searchResults.length > 0 && (
+                      <div className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg">
+                        {searchResults.map((part) => (
+                          <div
+                            key={part.id}
+                            className={`p-2 hover:bg-gray-100 cursor-pointer ${
+                              selectedInventoryPart === part.id ? 'bg-purple-100' : ''
+                            }`}
+                            onClick={() => {
+                              setSelectedInventoryPart(part.id);
+                              setSearchTerm(`${part.part_number} - ${part.description || ''}`);
+                              setCost(part.cost);
+                              // Optionally clear or prefill the override description.
+                              setCustomDescription('');
+                              setSearchResults([]);
+                            }}
+                          >
+                            <div className="font-medium">{part.part_number}</div>
+                            <div className="text-sm text-gray-600">{part.description}</div>
+                            <div className="text-sm text-green-600">
+                              {part.cost ? `$${part.cost.toFixed(2)}` : 'No price set'}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
-              </div>
-              <input
-                type="date"
-                placeholder="Last Replaced Date"
-                value={lastReplacedDate}
-                onChange={(e) => setLastReplacedDate(e.target.value)}
-                className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="Cost"
-                value={cost || ''}
-                onChange={(e) => setCost(e.target.value ? parseFloat(e.target.value) : null)}
-                className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
-              <input
-                type="text"
-                placeholder="Notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
-            </div>
-            <div className="flex items-center mb-4">
-                <input
+
+                  {/* Last Replaced Date */}
+                  <input
+                    type="date"
+                    placeholder="Last Replaced Date"
+                    value={lastReplacedDate}
+                    onChange={(e) => setLastReplacedDate(e.target.value)}
+                    className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+
+                  {/* Cost */}
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="Cost"
+                    value={cost || ''}
+                    onChange={(e) =>
+                      setCost(e.target.value ? parseFloat(e.target.value) : null)
+                    }
+                    className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+
+                  {/* Notes */}
+                  <input
+                    type="text"
+                    placeholder="Notes"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+
+                  {/* New Field: Override Description */}
+                  <input
+                    type="text"
+                    placeholder="Override Description"
+                    value={customDescription}
+                    onChange={(e) => setCustomDescription(e.target.value)}
+                    className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                  
+                </div>
+                
+                <div className="flex items-center mb-4">
+                  <input
                     type="checkbox"
                     id="trackReplacement"
                     checked={trackReplacement}
                     onChange={(e) => setTrackReplacement(e.target.checked)}
                     className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
-                />
-                <label htmlFor="trackReplacement" className="ml-2 block text-sm text-gray-700">
+                  />
+                  <label htmlFor="trackReplacement" className="ml-2 block text-sm text-gray-700">
                     Track replacement count
-                </label>
+                  </label>
                 </div>
-            <button 
-              type="submit" 
-              className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded transition duration-200"
-              disabled={!selectedInventoryPart}
-            >
-              {editingPart ? 'Update Part' : 
-       parts.some(p => p.inventory_part_id === selectedInventoryPart) ? 'Replace Part' : 'Add Part'}
-            </button>
+                
+                <button 
+                  type="submit" 
+                  className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded transition duration-200"
+                  disabled={!selectedInventoryPart}
+                >
+                  {editingPart ? 'Update Part' : 
+                  parts.some(p => p.inventory_part_id === selectedInventoryPart) ? 'Replace Part' : 'Add Part'}
+                </button>
+                
                 {editingPart && (
-                    <button
-                      type="button"
-                      onClick={cancelEditPart}
-                      className="ml-2 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded transition duration-200"
-                    >
-                      Cancel
-                    </button>
-               )}
-          </form>
+                  <button
+                    type="button"
+                    onClick={cancelEditPart}
+                    className="ml-2 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded transition duration-200"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </form>
+
+
+
+<div className='container  '>
+  {/* Header row with Search Bar and Total Parts Cost */}
+  <div className="flex-1 items-center justify-between mb-4">
+    {/* Search Input: flex-1 makes it take up available space */}
+    <input
+      type="text"
+      placeholder="Search parts..."
+      value={tableSearchTerm}
+      onChange={(e) => setTableSearchTerm(e.target.value)}
+      className="flex-1 p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500"
+    />
+
+    {/* Total Parts Cost (Moved inside the flex container) */}
+    <div className="ml-4 inline-block bg-gray-50 px-4 py-2 rounded-lg whitespace-nowrap">
+      <span className="font-medium">Total Parts Cost: </span>
+      <span className="text-green-600 font-bold">
+        ${calculateTotalCost().toFixed(2)}
+      </span>
+    </div>
+  </div>
+</div>
+
+
+
 
           <div className="bg-white rounded-lg shadow-md overflow-x-auto w-full">
             <div className="min-w-[800px]">
               <table className=" table-container min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part Number</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Replaced</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Times Replaced</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                  </tr>
+                      <tr>
+                        <th onClick={() => handleSort('part_name')} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer">
+                          Part Name {renderSortIcon('part_name')}
+                        </th>
+                        <th onClick={() => handleSort('code')} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer">
+                          Description {renderSortIcon('code')}
+                        </th>
+                        <th onClick={() => handleSort('cost')} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer">
+                          Cost {renderSortIcon('cost')}
+                        </th>
+                        <th onClick={() => handleSort('last_replaced_date')} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer">
+                          Last Replaced {renderSortIcon('last_replaced_date')}
+                        </th>
+                        <th onClick={() => handleSort('last_updated')} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer">
+                          Last Updated {renderSortIcon('last_updated')}
+                        </th>
+                        <th onClick={() => handleSort('notes')} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer">
+                          Notes {renderSortIcon('notes')}
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {parts.length > 0 ? (
-                    parts.map((part) => (
-                      <tr key={part.id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {part.part_name}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {part.code}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {part.cost ? `$${part.cost.toFixed(2)}` : 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {part.last_replaced_date
-                            ? new Date(part.last_replaced_date).toLocaleDateString()
-                            : 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {part.times_replaced || 0}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {part.last_updated ? new Date(part.last_updated).toLocaleString() : 'N/A'}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-500">
-                          {part.notes || 'N/A'}
-                        </td>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {filteredParts.length > 0 ? (
+                        filteredParts.map((part) => (
+                          <tr key={part.id}>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                              {part.part_name}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {editingCell && editingCell.id === part.id && editingCell.field === 'code' ? (
+                                <input
+                                  type="text"
+                                  value={editingCell.value}
+                                  onChange={(e) =>
+                                    setEditingCell({ id: part.id, field: 'code', value: e.target.value })
+                                  }
+                                  onBlur={() => handleCellUpdate(part.id, 'code', editingCell.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handleCellUpdate(part.id, 'code', editingCell.value);
+                                    }
+                                  }}
+                                  autoFocus
+                                  className="p-1 border rounded"
+                                />
+                              ) : (
+                                <span
+                                  onClick={() =>
+                                    setEditingCell({ id: part.id, field: 'code', value: part.code || '' })
+                                  }
+                                  className="cursor-pointer"
+                                  title="Click to edit description"
+                                >
+                                  {part.code || 'No description'}
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {editingCell && editingCell.id === part.id && editingCell.field === 'cost' ? (
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={editingCell.value}
+                                  onChange={(e) =>
+                                    setEditingCell({ id: part.id, field: 'cost', value: e.target.value })
+                                  }
+                                  onBlur={() => {
+                                    if (editingCell) handleCellUpdate(part.id, 'cost', editingCell.value);
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && editingCell) {
+                                      handleCellUpdate(part.id, 'cost', editingCell.value);
+                                    }
+                                  }}
+                                  autoFocus
+                                  className="p-1 border rounded w-full"
+                                />
+                              ) : (
+                                <span
+                                  onClick={() =>
+                                    setEditingCell({ id: part.id, field: 'cost', value: part.cost?.toString() || '' })
+                                  }
+                                  className="cursor-pointer"
+                                  title="Click to edit"
+                                >
+                                  {part.cost ? `$${part.cost.toFixed(2)}` : 'N/A'}
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {editingCell &&
+                              editingCell.id === part.id &&
+                              editingCell.field === 'last_replaced_date' ? (
+                                <input
+                                  type="date"
+                                  value={editingCell.value}
+                                  onChange={(e) =>
+                                    setEditingCell({
+                                      id: part.id,
+                                      field: 'last_replaced_date',
+                                      value: e.target.value,
+                                    })
+                                  }
+                                  onBlur={() => handleCellUpdate(part.id, 'last_replaced_date', editingCell.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handleCellUpdate(part.id, 'last_replaced_date', editingCell.value);
+                                    }
+                                  }}
+                                  autoFocus
+                                  className="p-1 border rounded w-full"
+                                />
+                              ) : (
+                                <span
+                                  onClick={() =>
+                                    setEditingCell({
+                                      id: part.id,
+                                      field: 'last_replaced_date',
+                                      value: part.last_replaced_date || '',
+                                    })
+                                  }
+                                  className="cursor-pointer"
+                                  title="Click to edit"
+                                >
+                                  {part.last_replaced_date ? formatDate(part.last_replaced_date) : 'N/A'}
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                              {part.last_updated ? new Date(part.last_updated).toLocaleString() : 'N/A'}
+                            </td>
+
+                            <td className="px-6 py-4 text-sm text-gray-500">
+                              {editingCell &&
+                              editingCell.id === part.id &&
+                              editingCell.field === 'notes' ? (
+                                <input
+                                  type="text"
+                                  value={editingCell.value}
+                                  onChange={(e) =>
+                                    setEditingCell({
+                                      id: part.id,
+                                      field: 'notes',
+                                      value: e.target.value,
+                                    })
+                                  }
+                                  onBlur={() => handleCellUpdate(part.id, 'notes', editingCell.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handleCellUpdate(part.id, 'notes', editingCell.value);
+                                    }
+                                  }}
+                                  autoFocus
+                                  className="p-1 border rounded w-full"
+                                />
+                              ) : (
+                                <span
+                                  onClick={() =>
+                                    setEditingCell({ id: part.id, field: 'notes', value: part.notes || '' })
+                                  }
+                                  className="cursor-pointer"
+                                  title="Click to edit"
+                                >
+                                  {part.notes || 'N/A'}
+                                </span>
+                              )}
+                            </td>
+
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           <div className="flex space-x-2">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    startEditPart(part);
-                                  }}
-                                  className="text-blue-600 hover:text-blue-800"
-                                >
-                                  Edit
-                                </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -498,16 +754,10 @@ async function addOrUpdatePart(e: FormEvent) {
               </table>
             </div>
           </div>
+     </div>
 
-          <div className="mt-4 text-right">
-            <div className="inline-block bg-gray-50 px-4 py-2 rounded-lg">
-              <span className="font-medium">Total Parts Cost: </span>
-              <span className="text-green-600 font-bold">
-                ${calculateTotalCost().toFixed(2)}
-              </span>
-            </div>
-          </div>
-        </div>
+       
+
       ) : (
         <div className="text-center py-8">
           <p className="text-gray-500">Loading transport details...</p>
