@@ -107,7 +107,26 @@ export default function Sidebar() {
           show: true
         }
       ]
-    },  
+    },    { 
+      label: 'Reports', 
+      icon: 'article',
+      show: hasPermission(currentUser, ['manager', 'data', 'andrew']), // Requires manager or higher
+      items: [
+        { 
+          href: '/reports/repairs', 
+          icon: 'close', 
+          label: 'Repairs',
+          show: hasPermission(currentUser, [ 'manager', 'data', 'andrew'])
+        },
+        // Add more tools here as needed
+        {
+          href: '/reports/daily-flow',
+          icon: 'air',
+          label: 'Daily Flow',
+          show: hasPermission(currentUser, [ 'manager', 'data', 'andrew'])
+        }
+      ]
+    },   
      { 
       label: 'Admin', 
       icon: 'admin_panel_settings',
