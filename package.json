@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
+    "@react-pdf/renderer": "^4.3.0",
     "@supabase/supabase-js": "^2.49.4",
     "@tailwindcss/typography": "^0.5.16",
     "@types/bcryptjs": "^2.4.6",
