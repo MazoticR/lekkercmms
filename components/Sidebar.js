@@ -110,7 +110,7 @@ export default function Sidebar() {
     },    { 
       label: 'Reports', 
       icon: 'article',
-      show: hasPermission(currentUser, ['manager', 'data', 'andrew']), // Requires manager or higher
+      show: true, // Requires manager or higher
       items: [
         { 
           href: '/reports/repairs', 
