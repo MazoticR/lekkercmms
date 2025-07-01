@@ -124,6 +124,12 @@ export default function Sidebar() {
           icon: 'air',
           label: 'Daily Flow',
           show: hasPermission(currentUser, [ 'manager', 'data', 'andrew'])
+        },
+         {
+          href: '/reports/cutsheet',
+          icon: 'content_cut',
+          label: 'Cut Sheet',
+          show: true
         }
       ]
     },   
