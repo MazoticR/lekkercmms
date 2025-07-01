@@ -126,29 +126,7 @@ export default function Home() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-8 min-w-fit">
-          <div className="card p-4 sm:p-6 min-w-[300px]">
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">Manage Machines</h3>
-            <p className="text-sm sm:text-base text-gray-600 mb-4">View and manage all your machines</p>
-            <a href="/machines" className="inline-block bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded text-sm sm:text-base transition duration-200">
-              Go to Machines
-            </a>
-          </div>
-          <div className="card p-4 sm:p-6 min-w-[300px]">
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">Add New Machine</h3>
-            <p className="text-sm sm:text-base text-gray-600 mb-4">Register a new machine to your inventory</p>
-            <a href="/machines/new" className="inline-block bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded text-sm sm:text-base transition duration-200">
-              Add Machine
-            </a>
-          </div>
-          <div className="card p-4 sm:p-6 min-w-[300px]">
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">System Health</h3>
-            <p className="text-sm sm:text-base text-gray-600 mb-4">Check system status and performance</p>
-            <button className="inline-block bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded text-sm sm:text-base transition duration-200">
-              View Status
-            </button>
-          </div>
-        </div>
+
 
         {/* Recent Activity */}
         <div className="card min-w-fit">
