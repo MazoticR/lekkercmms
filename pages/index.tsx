@@ -135,7 +135,7 @@ export default function Home() {
           </div>
           <div className="p-4 sm:p-6 min-w-fit">
             <p className="text-sm sm:text-base text-gray-500 italic">
-              Activity log will appear here once you start using the system
+              TBA
             </p>
           </div>
         </div>
