@@ -140,8 +140,11 @@ const standardMapping: Record<string, number> = {
   "S": 2,
   "SM": 2,      // treat SM as S
   "M": 3,
+  "MD": 3, // MD COMO M
   "L": 4,
+  "LG": 4, //LG COMO L
   "XL": 5,
+  "1XL": 5,
   "2XL": 6,
   "XXL": 6,     // treat XXL as 2XL
   "3XL": 7,
