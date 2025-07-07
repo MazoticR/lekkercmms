@@ -1,6 +1,7 @@
 // pages/reports/cutsheet.tsx
 "use client";
 
+import Head from 'next/head';
 import React, { useState } from "react";
 import {
   Document,
@@ -264,6 +265,9 @@ function CutSheetDoc({
   );
 
   return (
+
+
+
     <Document>
       <Page style={styles.page}>
         <View style={styles.container}>
