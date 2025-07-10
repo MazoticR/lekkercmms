@@ -1,5 +1,3 @@
-// components/inventory/FabricItemsTable.tsx
-
 import { useState, useEffect } from "react";
 import supabase from "../../lib/supabaseClient";
 
@@ -20,9 +18,11 @@ export default function FabricItemsTable({
   onSelectItem,
   selectedItemId,
 }: Props) {
-  const [items, setItems]   = useState<FabricItem[]>([]);
+  const [items, setItems]     = useState<FabricItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState("");
+  const [search, setSearch]   = useState("");
+
   const [newSKU, setNewSKU]   = useState("");
   const [newDesc, setNewDesc] = useState("");
 
@@ -31,11 +31,11 @@ export default function FabricItemsTable({
       setLoading(true);
       const { data, error } = await supabase
         .from("fabric_items")
-        .select("id, sku, description")
+        .select("id,sku,description")
         .eq("vendor_id", vendorId)
         .order("sku", { ascending: true });
       if (error) setError(error.message);
-      else if (data) setItems(data);
+      else setItems(data || []);
       setLoading(false);
     }
     if (vendorId) load();
@@ -53,80 +53,100 @@ export default function FabricItemsTable({
     else {
       setNewSKU("");
       setNewDesc("");
+      // reload
       const { data } = await supabase
         .from("fabric_items")
-        .select("id, sku, description")
+        .select("id,sku,description")
         .eq("vendor_id", vendorId)
         .order("sku", { ascending: true });
-      if (data) setItems(data);
+      setItems(data || []);
     }
     setLoading(false);
   };
 
+  const filtered = items.filter(
+    i =>
+      i.sku.toLowerCase().includes(search.toLowerCase()) ||
+      (i.description || "")
+        .toLowerCase()
+        .includes(search.toLowerCase())
+  );
+
   return (
     <div className="bg-white p-6 rounded-lg shadow-md space-y-4">
-      <h2 className="text-xl font-semibold text-gray-800">
-        Fabric Items
-      </h2>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <h2 className="text-xl font-semibold">Fabric Items</h2>
+        <input
+          type="text"
+          placeholder="Search SKU or description…"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="border rounded px-3 py-2 w-full md:w-1/3 focus:ring-2 focus:ring-blue-400"
+        />
+      </div>
 
-      <div className="flex gap-2">
+      {/* Add Item Form */}
+      <form
+        onSubmit={e => {
+          e.preventDefault();
+          addItem();
+        }}
+        className="grid grid-cols-1 md:grid-cols-3 gap-4"
+      >
         <input
           type="text"
           placeholder="SKU"
           value={newSKU}
-          onChange={(e) => setNewSKU(e.target.value)}
-          className="w-32 border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400"
+          onChange={e => setNewSKU(e.target.value)}
+          className="border rounded px-3 py-2 focus:ring-2 focus:ring-blue-400"
         />
         <input
           type="text"
           placeholder="Description"
           value={newDesc}
-          onChange={(e) => setNewDesc(e.target.value)}
-          className="flex-1 border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-400"
+          onChange={e => setNewDesc(e.target.value)}
+          className="border rounded px-3 py-2 focus:ring-2 focus:ring-blue-400"
         />
         <button
-          onClick={addItem}
+          type="submit"
           disabled={loading}
-          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:bg-gray-400"
         >
           Add Item
         </button>
-      </div>
+      </form>
 
       {error && <p className="text-red-600">{error}</p>}
 
-      {loading ? (
-        <p className="text-gray-600">Loading items…</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                  SKU
-                </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                  Description
-                </th>
+      {/* Items Table */}
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">
+                SKU
+              </th>
+              <th className="px-4 py-2 text-left text-xs uppercase text-gray-500">
+                Description
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-100">
+            {filtered.map(it => (
+              <tr
+                key={it.id}
+                onClick={() => onSelectItem?.(it)}
+                className={`cursor-pointer hover:bg-gray-100 ${
+                  it.id === selectedItemId ? "bg-blue-50" : ""
+                }`}
+              >
+                <td className="px-4 py-2">{it.sku}</td>
+                <td className="px-4 py-2">{it.description || "—"}</td>
               </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-100">
-              {items.map((itm) => (
-                <tr
-                  key={itm.id}
-                  onClick={() => onSelectItem?.(itm)}
-                  className={`cursor-pointer hover:bg-gray-100 ${
-                    itm.id === selectedItemId ? "bg-blue-50" : ""
-                  }`}
-                >
-                  <td className="px-4 py-2">{itm.sku}</td>
-                  <td className="px-4 py-2">{itm.description || "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
