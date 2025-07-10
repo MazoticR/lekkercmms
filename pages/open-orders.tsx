@@ -15,6 +15,7 @@ interface OrderItem {
   qty: string;
   size: string;
   project_id: string | null; // used for "Cut #"
+  qty_open: string; // Cantidades Abiertas
 }
 
 interface Order {
@@ -28,6 +29,7 @@ interface Order {
   order_items: OrderItem[];
   client: string;
   libertad_po: string;
+
 }
 
 //––––– Intermediate aggregated row –––––//
@@ -48,6 +50,7 @@ interface FlattenedRow {
   sumAmount: number; // Sum of amounts for this group
   client: string;
   libertad_po: string;
+  open_qty: number;
 }
 
 //––––– Final row after splitting into Standard vs. Other –––––//
@@ -105,8 +108,11 @@ const buttonStyle: React.CSSProperties = {
 
 const tableContainerStyle: React.CSSProperties = {
   overflowX: "auto",
+  overflowY: "auto",
+  maxHeight: "80vh",           // adjust as you like
   marginBottom: "30px",
 };
+
 
 const tableStyle: React.CSSProperties = {
   width: "100%",
@@ -114,12 +120,16 @@ const tableStyle: React.CSSProperties = {
 };
 
 const thStyle: React.CSSProperties = {
+  position: "sticky",
+  top: 0,
+  zIndex: 2,                     // sit above table body
   padding: "12px 15px",
   background: "linear-gradient(90deg, #4CAF50, #45A049)",
   color: "#fff",
   borderBottom: "2px solid #ddd",
   textAlign: "left",
 };
+
 
 const tdStyle: React.CSSProperties = {
   padding: "12px 15px",
@@ -179,6 +189,8 @@ export default function OpenOrdersTable() {
 
   const currentUser = getCurrentUser();
 const canEditOverride = Boolean(currentUser && hasPermission(currentUser, ['manager', 'admin']));
+const [openThreshold, setOpenThreshold] = useState<number>(0);
+
 
 
 
@@ -229,6 +241,7 @@ const canEditOverride = Boolean(currentUser && hasPermission(currentUser, ['mana
                 unit_price: item.unit_price,
                 cut: item.project_id || "N/A",
                 total_qty: 0,
+                open_qty: 0,
                 sizeDetails: {},
                 sumAmount: 0,
                 client: order.client || "N/A", // Capture Client
@@ -237,18 +250,36 @@ const canEditOverride = Boolean(currentUser && hasPermission(currentUser, ['mana
             }
             const row = groups.get(key)!;
             const qty = parseFloat(item.qty) || 0;
+            const qtyOpen   = parseFloat(item.qty_open)  || 0;
+
             row.total_qty += qty;
             row.sizeDetails[normalizedSize] = (row.sizeDetails[normalizedSize] || 0) + qty;
             const amt = parseFloat(item.amount) || 0;
             row.sumAmount += amt;
+            row.open_qty  += qtyOpen; 
+
           });
           flattenedRows.push(...groups.values());
+// right after you push into flattenedRows
+console.log(
+  "DEBUG open_qty:",
+  flattenedRows.map(r => ({
+    key: `${r.order_id}-${r.style_number}-${r.cut}-${r.color}`,
+    open: r.open_qty
+  }))
+);
+
+          
         });
 
         // Remove groups that contain a "SERVICE" size.
         flattenedRows = flattenedRows.filter(
           (row) => !Object.keys(row.sizeDetails).some((size) => size === "SERVICE")
         );
+
+        // Quita los que tienen open en 0
+        flattenedRows = flattenedRows.filter(row => row.open_qty > 0);
+
 
         // Split rows into Standard and Other based on our mapping.
         const finalRows: FinalRow[] = [];
@@ -293,6 +324,8 @@ const canEditOverride = Boolean(currentUser && hasPermission(currentUser, ['mana
     }
     fetchOrders();
   }, [API_TOKEN]);
+
+
 
   //––––– FETCH SUPABASE OVERRIDES –––––//
   // Once our rows have loaded, we can fetch persisted override values from Supabase.
@@ -398,6 +431,7 @@ const canEditOverride = Boolean(currentUser && hasPermission(currentUser, ['mana
       <th style={thStyle}>Style</th>
       <th style={thStyle}>Description</th>
       <th style={thStyle}>TotalQty</th>
+      <th style={thStyle}>OpenQty</th>
       <th style={thStyle}>Color</th>
       <th style={thStyle}>CancelDate</th>
       <th style={thStyle}>Cut #</th>
@@ -428,6 +462,7 @@ const canEditOverride = Boolean(currentUser && hasPermission(currentUser, ['mana
       </Head>
       {/* Division Toggle + Search */}
       <div style={controlsStyle}>
+        
         <div style={toggleStyle}>
           <label>
             <input
@@ -469,7 +504,22 @@ const canEditOverride = Boolean(currentUser && hasPermission(currentUser, ['mana
                 style={{ padding: "8px", borderRadius: "4px", border: "1px solid #ccc", width: "250px" }}
             />
             </div>
+  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+    <label htmlFor="threshold">Highlight open ≤</label>
+    <input
+      id="threshold"
+      type="number"
+      min={0}
+      value={openThreshold}
+      onChange={e => setOpenThreshold(parseFloat(e.target.value) || 0)}
+      style={inputStyle}
+    />
+  </div>
+
+            
       </div>
+
+      
       <h1 style={headerStyle}>Open Orders Details (Division #{selectedDivision})</h1>
 
       {/* Standard Sizes Breakdown */}
@@ -486,7 +536,7 @@ const canEditOverride = Boolean(currentUser && hasPermission(currentUser, ['mana
                 {standardRows.map((row, idx) => {
                   const key = generateOrderKey(row);
                   return (
-                    <tr key={rowKey(row, idx)} style={{ backgroundColor: idx % 2 === 0 ? "#ffffff" : "#f9f9f9" }}>
+                    <tr key={rowKey(row, idx)} style={{backgroundColor: row.open_qty <= openThreshold ? "#ffe6e6" : idx % 2 === 0 ? "#ffffff" : "#f9f9f9", }}>
                       <td style={tdStyle}>{row.account_number || "N/A"}</td>
                       <td style={tdStyle}>{row.customer_name}</td>
                       <td style={tdStyle}>{row.customer_po || "N/A"}</td>
@@ -496,6 +546,7 @@ const canEditOverride = Boolean(currentUser && hasPermission(currentUser, ['mana
                       <td style={tdStyle}>{row.style_number}</td>
                       <td style={tdStyle}>{row.description}</td>
                       <td style={{ ...tdStyle, textAlign: "right" }}>{row.total_qty}</td>
+                      <td style={{ ...tdStyle, textAlign: "right" }}>{row.open_qty}</td>
                       <td style={tdStyle}>{row.color}</td>
                       <td style={tdStyle}>{row.date_due}</td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>{row.cut}</td>
@@ -590,6 +641,7 @@ const canEditOverride = Boolean(currentUser && hasPermission(currentUser, ['mana
                       <td style={tdStyle}>{row.style_number}</td>
                       <td style={tdStyle}>{row.description}</td>
                       <td style={{ ...tdStyle, textAlign: "right" }}>{row.total_qty}</td>
+                      <td style={{ ...tdStyle, textAlign: "right" }}>{row.open_qty}</td>
                       <td style={tdStyle}>{row.color}</td>
                       <td style={tdStyle}>{row.date_due}</td>
                       <td style={{ ...tdStyle, textAlign: "center" }}>{row.cut}</td>
